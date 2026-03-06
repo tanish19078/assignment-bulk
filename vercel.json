@@ -19,5 +19,10 @@
       "src": "/(.*)",
       "dest": "public/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/*.py": {
+      "maxDuration": 60
+    }
+  }
 }

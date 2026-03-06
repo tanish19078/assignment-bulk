@@ -295,6 +295,9 @@ btnGenerate.addEventListener('click', async () => {
         }
 
         try {
+            // Rate limit protection: add a small delay (2s) between requests
+            if (i > 0) await new Promise(r => setTimeout(r, 2000));
+
             const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -306,9 +309,11 @@ btnGenerate.addEventListener('click', async () => {
                 }),
             });
 
-            if (!res.ok) throw new Error(`Server error: ${res.status}`);
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            const data = await res.json().catch(() => ({ error: `Server error: ${res.status}` }));
+            
+            if (!res.ok || data.error) {
+                throw new Error(data.error || `Server error: ${res.status}`);
+            }
 
             generatedExperiments.push({ aim, ...data });
 
@@ -316,6 +321,7 @@ btnGenerate.addEventListener('click', async () => {
                 cards[i].querySelector('.exp-status').textContent = '✅';
             }
         } catch (err) {
+            console.error(`Experiment ${i + 1} Error:`, err);
             showToast(`Experiment ${i + 1} failed: ${err.message}`, 'error');
             // Push a fallback
             generatedExperiments.push({
