@@ -90,16 +90,32 @@ Write a very short (3-5 words) descriptive caption for the terminal output scree
             )
             text = chat_completion.choices[0].message.content
 
-            if '[CONCEPT]' not in text or '[CODE]' not in text or '[OUTPUT]' not in text or '[CAPTION]' not in text:
-                raise ValueError('Malformed API response — missing expected tags')
+            # Robust Parsing using Regex
+            def extract_section(tag, text):
+                pattern = rf"\[{tag}\](.*?)(\[|$)"
+                match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+                return match.group(1).strip() if match else None
 
-            concept = text.split('[CONCEPT]')[1].split('[CODE]')[0].strip()
-            code = text.split('[CODE]')[1].split('[OUTPUT]')[0].strip()
-            output_part = text.split('[OUTPUT]')[1].split('[CAPTION]')[0].strip()
-            caption = text.split('[CAPTION]')[1].strip()
+            concept = extract_section("CONCEPT", text)
+            code = extract_section("CODE", text)
+            output_part = extract_section("OUTPUT", text)
+            caption = extract_section("CAPTION", text)
 
-            code = code.replace('```c', '').replace('```C', '').replace('```python', '').replace('```javascript', '').replace('```', '').strip()
-            output_part = output_part.replace('```', '').strip()
+            # Fallback if tags are missing or malformed
+            if not all([concept, code, output_part, caption]):
+                # Try to see if we can at least find CODE or CONCEPT
+                if not concept: concept = "No concept description provided by API."
+                if not code: code = "// No code provided for this experiment."
+                if not output_part: output_part = "No output provided."
+                if not caption: caption = "Experiment Output"
+                
+                # If everything is missing, then it's truly malformed
+                if "[CONCEPT]" not in text.upper() and "[CODE]" not in text.upper():
+                    raise ValueError('Malformed API response — missing expected tags')
+
+            # Clean up markdown fences if present
+            code = re.sub(r'```[a-zA-Z]*', '', code).replace('```', '').strip()
+            output_part = re.sub(r'```', '', output_part).strip()
 
             result = {
                 'concept': concept,
