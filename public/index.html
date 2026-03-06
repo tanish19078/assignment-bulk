@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PractiGen — Auto Practical File Generator</title>
+    <meta name="description" content="Generate beautifully formatted practical lab documents with AI-powered code, concepts, and terminal output screenshots.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <!-- Header -->
+    <header id="app-header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>PractiGen</h1>
+            </div>
+            <p class="tagline">AI-Powered Practical File Generator</p>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main id="app-main">
+        <!-- Step Indicators -->
+        <div class="steps-bar" id="steps-bar">
+            <div class="step active" data-step="1">
+                <span class="step-num">1</span>
+                <span class="step-label">Configure</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="2">
+                <span class="step-num">2</span>
+                <span class="step-label">Write Aims</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="3">
+                <span class="step-num">3</span>
+                <span class="step-label">Generate</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="4">
+                <span class="step-num">4</span>
+                <span class="step-label">Download</span>
+            </div>
+        </div>
+
+        <!-- ====== STEP 1: Settings ====== -->
+        <section class="card glass-card" id="section-settings">
+            <div class="card-header">
+                <h2>⚙️ Configuration</h2>
+                <button class="btn-ghost" id="toggle-advanced" type="button">Advanced ▾</button>
+            </div>
+
+            <div class="form-grid">
+                <!-- API Key -->
+                <div class="form-group full-width">
+                    <label for="api-key">Groq API Key</label>
+                    <div class="input-with-icon">
+                        <input type="password" id="api-key" placeholder="gsk_xxxx..." autocomplete="off">
+                        <button class="btn-icon" id="toggle-key-visibility" type="button" title="Show/hide key">👁️</button>
+                    </div>
+                    <span class="hint">Leave empty to use Mock Mode</span>
+                </div>
+
+                <!-- Model -->
+                <div class="form-group">
+                    <label for="model-select">AI Model</label>
+                    <select id="model-select">
+                        <option value="llama-3.3-70b-versatile" selected>LLaMA 3.3 70B</option>
+                        <option value="llama-3.1-8b-instant">LLaMA 3.1 8B (Fast)</option>
+                        <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                        <option value="gemma2-9b-it">Gemma 2 9B</option>
+                    </select>
+                </div>
+
+                <!-- Mock Mode -->
+                <div class="form-group">
+                    <label for="mock-toggle">Mock Mode</label>
+                    <div class="toggle-wrapper">
+                        <label class="toggle">
+                            <input type="checkbox" id="mock-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label" id="mock-label">Off</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Settings -->
+            <div class="advanced-settings" id="advanced-settings">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="font-name">Document Font</label>
+                        <select id="font-name">
+                            <option value="Times New Roman" selected>Times New Roman</option>
+                            <option value="Arial">Arial</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Georgia">Georgia</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="body-size">Body Font Size</label>
+                        <input type="number" id="body-size" value="12" min="8" max="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="heading-size">Heading Font Size</label>
+                        <input type="number" id="heading-size" value="14" min="10" max="24">
+                    </div>
+                    <div class="form-group">
+                        <label for="code-size">Code Font Size</label>
+                        <input type="number" id="code-size" value="10" min="6" max="16">
+                    </div>
+                    <div class="form-group">
+                        <label for="image-width">Image Width (inches)</label>
+                        <input type="number" id="image-width" value="5.0" min="2" max="7" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label for="output-filename">Output Filename</label>
+                        <input type="text" id="output-filename" value="Generated_Practical_File.docx" placeholder="output.docx">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="btn-next-to-aims" type="button">
+                Continue to Aims →
+            </button>
+        </section>
+
+        <!-- ====== STEP 2: Aims Editor ====== -->
+        <section class="card glass-card hidden" id="section-aims">
+            <div class="card-header">
+                <h2>📝 Experiment Aims</h2>
+                <div class="header-actions">
+                    <label class="btn btn-outline btn-sm" for="file-upload">
+                        📂 Upload .txt
+                    </label>
+                    <input type="file" id="file-upload" accept=".txt" hidden>
+                    <button class="btn btn-outline btn-sm" id="btn-load-sample" type="button">Load Sample</button>
+                </div>
+            </div>
+
+            <p class="section-desc">Write or paste your experiment aims below. Separate each experiment with <code>---</code> on its own line.</p>
+
+            <textarea id="aims-textarea" rows="14" placeholder="Write a program to add two numbers and display the sum.
+---
+Write a program to find the greatest among three numbers.
+---
+Write a program to generate Fibonacci series."></textarea>
+
+            <div class="aims-footer">
+                <button class="btn btn-ghost" id="btn-back-to-settings" type="button">← Back</button>
+                <button class="btn btn-primary" id="btn-parse" type="button">
+                    Parse & Preview →
+                </button>
+            </div>
+        </section>
+
+        <!-- ====== STEP 3: Preview & Generate ====== -->
+        <section class="card glass-card hidden" id="section-generate">
+            <div class="card-header">
+                <h2>🔬 Experiments Preview</h2>
+                <span class="badge" id="experiment-count">0 experiments</span>
+            </div>
+
+            <div id="experiments-list" class="experiments-list"></div>
+
+            <!-- Progress -->
+            <div class="progress-container hidden" id="progress-container">
+                <div class="progress-header">
+                    <span id="progress-text">Generating...</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="aims-footer">
+                <button class="btn btn-ghost" id="btn-back-to-aims" type="button">← Back</button>
+                <button class="btn btn-primary btn-generate" id="btn-generate" type="button">
+                    ⚡ Generate All
+                </button>
+            </div>
+        </section>
+
+        <!-- ====== STEP 4: Results & Download ====== -->
+        <section class="card glass-card hidden" id="section-download">
+            <div class="card-header">
+                <h2>✅ Generation Complete</h2>
+            </div>
+
+            <div id="results-list" class="results-list"></div>
+
+            <div class="aims-footer">
+                <button class="btn btn-ghost" id="btn-back-to-generate" type="button">← Back</button>
+                <button class="btn btn-primary btn-download" id="btn-download" type="button">
+                    📥 Download .docx
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Footer -->
+    <footer id="app-footer">
+        <p>Built with ⚡ by PractiGen &mdash; Powered by Groq AI</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
