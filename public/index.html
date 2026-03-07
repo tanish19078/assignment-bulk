@@ -1,21 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PractiGen — Auto Practical File Generator</title>
-    <meta name="description" content="Generate beautifully formatted practical lab documents with AI-powered code, concepts, and terminal output screenshots.">
+    <meta name="description"
+        content="Generate beautifully formatted practical lab documents with AI-powered code, concepts, and terminal output screenshots.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    
+
     <!-- Vercel Web Analytics -->
     <script>
         window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
     </script>
     <script defer src="/_vercel/insights/script.js"></script>
 </head>
+
 <body>
     <!-- Animated background -->
     <div class="bg-grid"></div>
@@ -68,10 +73,11 @@
             <div class="form-grid">
                 <!-- API Key -->
                 <div class="form-group full-width">
-                    <label for="api-key">Groq API Key</label>
+                    <label for="api-key">API Key (Groq or Sarvam)</label>
                     <div class="input-with-icon">
-                        <input type="password" id="api-key" placeholder="gsk_xxxx..." autocomplete="off">
-                        <button class="btn-icon" id="toggle-key-visibility" type="button" title="Show/hide key">👁️</button>
+                        <input type="password" id="api-key" placeholder="gsk_xxxx... or sarvam_key" autocomplete="off">
+                        <button class="btn-icon" id="toggle-key-visibility" type="button"
+                            title="Show/hide key">👁️</button>
                     </div>
                     <span class="hint">Leave empty to use Mock Mode</span>
                 </div>
@@ -80,10 +86,11 @@
                 <div class="form-group">
                     <label for="model-select">AI Model</label>
                     <select id="model-select">
-                        <option value="llama-3.3-70b-versatile" selected>LLaMA 3.3 70B</option>
-                        <option value="llama-3.1-8b-instant">LLaMA 3.1 8B (Fast)</option>
-                        <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                        <option value="gemma2-9b-it">Gemma 2 9B</option>
+                        <option value="llama-3.3-70b-versatile" selected>LLaMA 3.3 70B (Groq)</option>
+                        <option value="llama-3.1-8b-instant">LLaMA 3.1 8B (Groq Fast)</option>
+                        <option value="sarvam-m">Sarvam-M (Indic Optimized)</option>
+                        <option value="sarvam-30b">Sarvam-30B (Powerful)</option>
+                        <option value="sarvam-105b">Sarvam-105B (Flagship Quality 🏆)</option>
                     </select>
                 </div>
 
@@ -130,7 +137,8 @@
                     </div>
                     <div class="form-group">
                         <label for="output-filename">Output Filename</label>
-                        <input type="text" id="output-filename" value="Generated_Practical_File.docx" placeholder="output.docx">
+                        <input type="text" id="output-filename" value="Generated_Practical_File.docx"
+                            placeholder="output.docx">
                     </div>
                 </div>
             </div>
@@ -153,7 +161,9 @@
                 </div>
             </div>
 
-            <p class="section-desc">Write or paste your experiment aims below. Separate each experiment with <code>---</code> on its own line.</p>
+            <p class="section-desc">Write or paste your experiment aims below. Separate each experiment with
+                <code>---</code> on its own line.
+            </p>
 
             <textarea id="aims-textarea" rows="14" placeholder="Write a program to add two numbers and display the sum.
 ---
@@ -224,4 +234,5 @@ Write a program to generate Fibonacci series."></textarea>
 
     <script src="script.js"></script>
 </body>
+
 </html>

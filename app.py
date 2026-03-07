@@ -5,15 +5,18 @@ import time
 import os
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv()
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from PIL import Image, ImageDraw, ImageFont
+from sarvamai import SarvamAI
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 CORS(app)
-
 
 # ==================== Static Frontend ====================
 @app.route('/')
@@ -53,7 +56,18 @@ def api_generate():
         model = data.get('model', 'llama-3.3-70b-versatile')
         mock = data.get('mock', False)
 
-        if mock or not api_key:
+        if "sarvam" in model.lower():
+            if not api_key:
+                api_key = os.getenv("SARVAM_API_KEY")
+            if not api_key:
+                mock = True
+        else:
+            if not api_key:
+                api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                mock = True
+
+        if mock:
             result = {
                 'concept': f'This experiment demonstrates fundamental programming concepts relevant to: {aim[:80]}...',
                 'code': f'#include <stdio.h>\n\nint main() {{\n    // Code for: {aim[:40]}\n    printf("Executing experiment...\\n");\n    return 0;\n}}',
@@ -61,10 +75,41 @@ def api_generate():
                 'caption': f'Terminal output for {aim[:25]}'
             }
         else:
-            from groq import Groq
-            client = Groq(api_key=api_key)
+            if "sarvam" in model.lower():
+                client = SarvamAI(api_subscription_key=api_key)
+                prompt = f"""You are a professional programming lab assistant with expertise in Indian languages. For this experiment aim:
 
-            prompt = f"""You are a professional programming lab assistant. For this experiment aim:
+"{aim}"
+
+Identify the most appropriate programming language for this aim (e.g., C, JavaScript, Python, etc.) and provide the following:
+
+Respond EXACTLY in this format (use these exact tags):
+
+[CONCEPT]
+Write 3-4 lines explaining the programming concepts used. Academic style. 
+CRITICAL: If the aim is written in an Indian language (like Hindi, Telugu, Tamil, Marathi, etc.), write this CONCEPT section in that same Indian language. Otherwise, use English.
+
+[CODE]
+Write the complete working source code. Plain code only, no markdown fences. Code should use standard English keywords (typical for programming).
+
+[OUTPUT]
+Show the realistic expected terminal or console output when this program runs.
+
+[CAPTION]
+Write a very short (3-5 words) descriptive caption for the terminal output screenshot.
+If the aim is in an Indian language, write this caption in that same language.
+"""
+                messages = [
+                    {"role": "user", "content": prompt}
+                ]
+                # Sarvam LLM call
+                response = client.chat.completions(messages=messages, model=model)
+                text = response.choices[0].message.content
+            else:
+                from groq import Groq
+                client = Groq(api_key=api_key)
+
+                prompt = f"""You are a professional programming lab assistant. For this experiment aim:
 
 "{aim}"
 
@@ -84,11 +129,11 @@ Show the realistic expected terminal or console output when this program runs.
 [CAPTION]
 Write a very short (3-5 words) descriptive caption for the terminal output screenshot.
 """
-            chat_completion = client.chat.completions.create(
-                messages=[{'role': 'user', 'content': prompt}],
-                model=model,
-            )
-            text = chat_completion.choices[0].message.content
+                chat_completion = client.chat.completions.create(
+                    messages=[{'role': 'user', 'content': prompt}],
+                    model=model,
+                )
+                text = chat_completion.choices[0].message.content
 
             # Robust Parsing using Regex
             def extract_section(tag, text):
