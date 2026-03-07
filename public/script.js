@@ -1,463 +1,494 @@
-// ========== DOM References ==========
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-// Sections
-const sectionSettings = $('#section-settings');
-const sectionAims = $('#section-aims');
-const sectionGenerate = $('#section-generate');
-const sectionDownload = $('#section-download');
+const sections = {
+    dashboard: $('#section-dashboard'),
+    workspace: $('#section-workspace')
+};
 
-// Settings
+const phases = {
+    1: $('#phase-1'),
+    2: $('#phase-2'),
+    3: $('#phase-3'),
+    4: $('#phase-4')
+};
+
+const navDashboard = $('#nav-dashboard');
+const navWorkspace = $('#nav-workspace');
+const breadcrumbMain = $('#breadcrumb-main');
+const breadcrumbSub = $('#breadcrumb-sub');
+const breadcrumbSep = $('#breadcrumb-sep-1');
+
+const btnLaunch = $('#btn-launch');
+const btnNextToP2 = $('#btn-p1-next');
+const btnBackToP1 = $('#btn-p2-back');
+const btnParse = $('#btn-p2-next');
+const btnImport = $('#btn-import');
+const btnBackToP2 = $('#btn-p3-back');
+const btnNextToP4 = $('#btn-p3-next');
+const btnHomeFromP4 = $('#btn-p4-home');
+const btnDownload = $('#btn-download-all');
+const importInput = $('#aims-import-input');
+
 const apiKeyInput = $('#api-key');
-const modelSelect = $('#model-select');
-const mockToggle = $('#mock-toggle');
-const mockLabel = $('#mock-label');
-const toggleKeyBtn = $('#toggle-key-visibility');
-const advancedBtn = $('#toggle-advanced');
-const advancedPanel = $('#advanced-settings');
-const fontNameSelect = $('#font-name');
-const bodySizeInput = $('#body-size');
-const headingSizeInput = $('#heading-size');
-const codeSizeInput = $('#code-size');
-const imageWidthInput = $('#image-width');
-const outputFilename = $('#output-filename');
-
-// Aims
 const aimsTextarea = $('#aims-textarea');
-const fileUpload = $('#file-upload');
-const btnLoadSample = $('#btn-load-sample');
+const modelInputs = () => Array.from($$('input[name="model"]')).find(i => i.checked).value;
 
-// Generate
-const experimentsList = $('#experiments-list');
-const experimentCount = $('#experiment-count');
-const progressContainer = $('#progress-container');
-const progressText = $('#progress-text');
-const progressPercent = $('#progress-percent');
-const progressFill = $('#progress-fill');
-const resultsList = $('#results-list');
+const getSettings = () => ({
+    fontName: $('#setting-font').value,
+    bodySize: $('#setting-body-size').value,
+    headingSize: $('#setting-heading-size').value,
+    codeSize: $('#setting-code-size').value,
+    captionSize: '10',
+    imageWidth: $('#setting-img-width').value,
+    terminalImgWidth: $('#setting-term-width').value,
+    outputFilename: 'PractiGen_Artifact.docx'
+});
 
-// Navigation buttons
-const btnNextToAims = $('#btn-next-to-aims');
-const btnBackToSettings = $('#btn-back-to-settings');
-const btnParse = $('#btn-parse');
-const btnBackToAims = $('#btn-back-to-aims');
-const btnGenerate = $('#btn-generate');
-const btnBackToGenerate = $('#btn-back-to-generate');
-const btnDownload = $('#btn-download');
+// Progress
+const overallProgressBar = $('#overall-progress-bar');
+const overallPercent = $('#overall-percent');
+const experimentGrid = $('#experiment-grid');
+const stepperProgress = $('#stepper-progress');
+const stepItems = $$('.step-item');
+
+// Advanced Tray
+const toggleAdvanced = $('#toggle-advanced');
+const advancedTray = $('#advanced-settings-tray');
+const advancedArrow = $('#advanced-arrow');
 
 // ========== State ==========
+let currentStep = 1;
 let parsedAims = [];
 let generatedExperiments = [];
-let currentStep = 1;
 
-// ========== Utilities ==========
-function showToast(message, type = 'info') {
-    const container = $('#toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(40px)';
-        toast.style.transition = '0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, 3500);
-}
+// ========== Core Logic ==========
 
-function setStep(step) {
-    currentStep = step;
-    const steps = $$('.step');
-    steps.forEach((el, idx) => {
-        el.classList.remove('active', 'done');
-        if (idx + 1 < step) el.classList.add('done');
-        if (idx + 1 === step) el.classList.add('active');
+function init() {
+    loadFromLocalStorage();
+    setupEventListeners();
+    showSection('dashboard');
+
+    // UI Helper for Advanced Tray
+    toggleAdvanced.addEventListener('click', () => {
+        advancedTray.classList.toggle('hidden');
+        advancedArrow.classList.toggle('rotate-180');
+    });
+
+    // Visibility toggle for API Key
+    $('#toggle-api-visibility').addEventListener('click', () => {
+        const type = apiKeyInput.type === 'password' ? 'text' : 'password';
+        apiKeyInput.type = type;
+        $('#toggle-api-visibility').querySelector('span').textContent = type === 'password' ? 'visibility' : 'visibility_off';
     });
 }
 
-function showSection(section) {
-    [sectionSettings, sectionAims, sectionGenerate, sectionDownload].forEach(s => {
-        s.classList.add('hidden');
+function showSection(key) {
+    Object.keys(sections).forEach(k => {
+        sections[k].classList.add('hidden');
     });
-    section.classList.remove('hidden');
-    section.style.animation = 'none';
-    // Trigger reflow for animation restart
-    void section.offsetHeight;
-    section.style.animation = 'card-in 0.5s ease-out both';
-    window.scrollTo({ top: section.offsetTop - 100, behavior: 'smooth' });
-}
+    sections[key].classList.remove('hidden');
 
-function getSettings() {
-    return {
-        fontName: fontNameSelect.value,
-        bodySize: bodySizeInput.value,
-        headingSize: headingSizeInput.value,
-        codeSize: codeSizeInput.value,
-        captionSize: '10',
-        imageWidth: imageWidthInput.value,
-        terminalImgWidth: '600',
-        outputFilename: outputFilename.value || 'Generated_Practical_File.docx',
-    };
-}
-
-function saveToLocalStorage() {
-    const data = {
-        apiKey: apiKeyInput.value,
-        model: modelSelect.value,
-        mock: mockToggle.checked,
-        fontName: fontNameSelect.value,
-        bodySize: bodySizeInput.value,
-        headingSize: headingSizeInput.value,
-        codeSize: codeSizeInput.value,
-        imageWidth: imageWidthInput.value,
-        outputFilename: outputFilename.value,
-        aims: aimsTextarea.value,
-    };
-    localStorage.setItem('practigen_settings', JSON.stringify(data));
-}
-
-function loadFromLocalStorage() {
-    const raw = localStorage.getItem('practigen_settings');
-    if (!raw) return;
-    try {
-        const data = JSON.parse(raw);
-        if (data.apiKey) apiKeyInput.value = data.apiKey;
-        if (data.model) modelSelect.value = data.model;
-        if (data.mock !== undefined) {
-            mockToggle.checked = data.mock;
-            mockLabel.textContent = data.mock ? 'On' : 'Off';
-        }
-        if (data.fontName) fontNameSelect.value = data.fontName;
-        if (data.bodySize) bodySizeInput.value = data.bodySize;
-        if (data.headingSize) headingSizeInput.value = data.headingSize;
-        if (data.codeSize) codeSizeInput.value = data.codeSize;
-        if (data.imageWidth) imageWidthInput.value = data.imageWidth;
-        if (data.outputFilename) outputFilename.value = data.outputFilename;
-        if (data.aims) aimsTextarea.value = data.aims;
-    } catch (e) { /* ignore */ }
-}
-
-// ========== Event Listeners ==========
-
-// Toggle API key visibility
-toggleKeyBtn.addEventListener('click', () => {
-    const isPassword = apiKeyInput.type === 'password';
-    apiKeyInput.type = isPassword ? 'text' : 'password';
-    toggleKeyBtn.textContent = isPassword ? '🙈' : '👁️';
-});
-
-// Toggle mock mode label
-mockToggle.addEventListener('change', () => {
-    mockLabel.textContent = mockToggle.checked ? 'On' : 'Off';
-});
-
-// Toggle advanced settings
-advancedBtn.addEventListener('click', () => {
-    advancedPanel.classList.toggle('open');
-    advancedBtn.textContent = advancedPanel.classList.contains('open') ? 'Advanced ▴' : 'Advanced ▾';
-});
-
-// File upload
-fileUpload.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        aimsTextarea.value = ev.target.result;
-        showToast(`Loaded "${file.name}"`, 'success');
-    };
-    reader.readAsText(file);
-});
-
-// Load sample aims
-btnLoadSample.addEventListener('click', () => {
-    aimsTextarea.value = `Install C compiler (GCC/Code::Blocks), set up IDE, compile and run the first "Hello, World!" program.
----
-Write a Program to show the use to input (Scanf)/output (Printf) statements and block structure of C-program by highlighting the features of "stdio.h".
----
-Write a program to add two numbers and display the sum.
----
-Write a program to calculate the area and the circumference of a circle by using radius as the input provided by the user.
----
-Write a Program to perform addition, subtraction, division and multiplication of two numbers given as input by the user.`;
-    showToast('Sample aims loaded', 'info');
-});
-
-// ========== Navigation ==========
-
-btnNextToAims.addEventListener('click', () => {
-    saveToLocalStorage();
-    setStep(2);
-    showSection(sectionAims);
-});
-
-btnBackToSettings.addEventListener('click', () => {
-    setStep(1);
-    showSection(sectionSettings);
-});
-
-btnParse.addEventListener('click', async () => {
-    const text = aimsTextarea.value.trim();
-    if (!text) {
-        showToast('Please enter at least one experiment aim', 'error');
-        return;
+    // Update active nav
+    if (key === 'dashboard') {
+        navDashboard.classList.add('bg-primary/5', 'text-primary');
+        navDashboard.classList.remove('text-slate-500');
+        navWorkspace.classList.remove('bg-primary/5', 'text-primary');
+        navWorkspace.classList.add('text-slate-500');
+        breadcrumbMain.textContent = 'Overview';
+        breadcrumbSub.classList.add('hidden');
+        breadcrumbSep.classList.add('hidden');
+    } else {
+        navWorkspace.classList.add('bg-primary/5', 'text-primary');
+        navWorkspace.classList.remove('text-slate-500');
+        navDashboard.classList.remove('bg-primary/5', 'text-primary');
+        navDashboard.classList.add('text-slate-500');
+        breadcrumbMain.textContent = 'Pipeline';
+        breadcrumbSub.classList.remove('hidden');
+        breadcrumbSep.classList.remove('hidden');
+        breadcrumbSub.textContent = 'Drafting Phase';
     }
+}
 
-    btnParse.classList.add('loading');
-    btnParse.disabled = true;
+function setPhase(phase) {
+    currentStep = phase;
+    Object.keys(phases).forEach(p => {
+        phases[p].classList.add('hidden');
+    });
+    phases[phase].classList.remove('hidden');
 
-    try {
-        const res = await fetch('/api/parse', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
-        });
+    // Update Stepper
+    const progressWidth = ((phase - 1) / (stepItems.length - 1)) * 100;
+    stepperProgress.style.width = `${progressWidth}%`;
 
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const data = await res.json();
+    stepItems.forEach((item, idx) => {
+        const stepNum = idx + 1;
+        const icon = item.querySelector('.icon-container');
+        const label = item.querySelector('span');
 
-        if (data.error) throw new Error(data.error);
+        item.classList.remove('active', 'done');
+        icon.classList.remove('bg-primary', 'text-white', 'bg-slate-100', 'text-slate-400', 'bg-emerald-50', 'text-emerald-600', 'border-emerald-100');
+        label.classList.remove('text-slate-900', 'text-primary', 'text-emerald-600');
 
-        parsedAims = data.aims;
+        if (stepNum < phase) {
+            item.classList.add('done');
+            icon.classList.add('bg-emerald-50', 'text-emerald-600', 'border-emerald-100');
+            icon.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span>';
+            label.classList.add('text-emerald-600');
+        } else if (stepNum === phase) {
+            item.classList.add('active');
+            icon.classList.add('bg-primary', 'text-white');
+            label.classList.add('text-primary', 'font-bold');
+            const icons = ['settings', 'target', 'auto_awesome', 'ios_share'];
+            icon.innerHTML = `<span class="material-symbols-outlined text-[18px]">${icons[idx]}</span>`;
+        } else {
+            icon.classList.add('bg-slate-100', 'text-slate-400');
+            label.classList.add('text-slate-400');
+            const icons = ['settings', 'target', 'auto_awesome', 'ios_share'];
+            icon.innerHTML = `<span class="material-symbols-outlined text-[18px]">${icons[idx]}</span>`;
+        }
+    });
 
-        if (parsedAims.length === 0) {
-            showToast('No experiments found. Check your separator (---)', 'error');
+    // Update Breadcrumb
+    const phaseNames = ['', 'Setup Context', 'Drafting Aims', 'Neural Synthesis', 'Artifact Export'];
+    breadcrumbSub.textContent = phaseNames[phase];
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setupEventListeners() {
+    navDashboard.addEventListener('click', () => showSection('dashboard'));
+    navWorkspace.addEventListener('click', () => {
+        showSection('workspace');
+        setPhase(currentStep);
+    });
+
+    btnLaunch.addEventListener('click', () => {
+        showSection('workspace');
+        setPhase(1);
+    });
+
+    btnNextToP2.addEventListener('click', () => {
+        saveToLocalStorage();
+        setPhase(2);
+    });
+
+    btnBackToP1.addEventListener('click', () => setPhase(1));
+
+    btnParse.addEventListener('click', async () => {
+        const text = aimsTextarea.value.trim();
+        if (!text) {
+            showToast('Logic drafting area is empty.', 'warning');
             return;
         }
 
-        // Render experiment cards
-        experimentsList.innerHTML = '';
-        parsedAims.forEach((aim, i) => {
-            const card = document.createElement('div');
-            card.className = 'experiment-card';
-            card.style.animationDelay = `${i * 0.06}s`;
-            card.innerHTML = `
-                <span class="exp-num">${i + 1}</span>
-                <span class="exp-text">${escapeHtml(aim.length > 150 ? aim.slice(0, 150) + '...' : aim)}</span>
-                <span class="exp-status">⏳</span>
-            `;
-            experimentsList.appendChild(card);
-        });
-        experimentCount.textContent = `${parsedAims.length} experiment${parsedAims.length > 1 ? 's' : ''}`;
-
-        saveToLocalStorage();
-        setStep(3);
-        showSection(sectionGenerate);
-        showToast(`Parsed ${parsedAims.length} experiments`, 'success');
-
-    } catch (err) {
-        showToast(`Parse failed: ${err.message}`, 'error');
-    } finally {
-        btnParse.classList.remove('loading');
-        btnParse.disabled = false;
-    }
-});
-
-btnBackToAims.addEventListener('click', () => {
-    setStep(2);
-    showSection(sectionAims);
-});
-
-// ========== Generate ==========
-btnGenerate.addEventListener('click', async () => {
-    if (parsedAims.length === 0) {
-        showToast('No aims to generate', 'error');
-        return;
-    }
-
-    const apiKey = apiKeyInput.value.trim();
-    const mock = mockToggle.checked || !apiKey;
-
-    if (!apiKey && !mockToggle.checked) {
-        showToast('No API key provided — using Mock Mode', 'info');
-    }
-
-    btnGenerate.disabled = true;
-    btnGenerate.classList.add('loading');
-    btnBackToAims.disabled = true;
-
-    progressContainer.classList.remove('hidden');
-    generatedExperiments = [];
-
-    const cards = experimentsList.querySelectorAll('.experiment-card');
-
-    for (let i = 0; i < parsedAims.length; i++) {
-        const aim = parsedAims[i];
-        const pct = Math.round(((i) / parsedAims.length) * 100);
-        progressFill.style.width = `${pct}%`;
-        progressPercent.textContent = `${pct}%`;
-        progressText.textContent = `Generating experiment ${i + 1} of ${parsedAims.length}...`;
-
-        // Update card status
-        if (cards[i]) {
-            cards[i].querySelector('.exp-status').textContent = '🔄';
-        }
+        btnParse.disabled = true;
+        btnParse.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> Parsing Matrix...';
 
         try {
-            // Rate limit protection: add a small delay (2s) between requests
-            if (i > 0) await new Promise(r => setTimeout(r, 2000));
+            const res = await fetch('/api/parse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
 
-            const res = await fetch('/api/generate', {
+            parsedAims = data.aims;
+            renderExperimentWaitlist();
+            setPhase(3);
+            showToast(`Loaded ${parsedAims.length} experiments.`, 'success');
+
+            // Auto-start generation
+            startGeneration();
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            btnParse.disabled = false;
+            btnParse.innerHTML = 'Start Generation <span class="material-symbols-outlined text-[18px]">bolt</span>';
+        }
+    });
+
+    btnBackToP2.addEventListener('click', () => setPhase(2));
+    btnNextToP4.addEventListener('click', () => setPhase(4));
+    btnHomeFromP4.addEventListener('click', () => {
+        showSection('dashboard');
+        currentStep = 1;
+    });
+
+    $('#btn-sample').addEventListener('click', () => {
+        aimsTextarea.value = "Aim 1: Implement a Doubly Linked List with basic CRUD operations in C++.\n---\nAim 2: Write a Python script to perform sentiment analysis on a batch of CSV comments.\n---\nAim 3: Develop a responsive landing page using pure HTML and modern CSS Gradients.";
+        showToast("Simulation aims loaded.", "info");
+    });
+
+    btnImport.addEventListener('click', () => importInput.click());
+
+    importInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (re) => {
+            aimsTextarea.value = re.target.result;
+            showToast("Manifest imported successfully.", "success");
+        };
+        reader.readAsText(file);
+    });
+
+    btnDownload.addEventListener('click', async () => {
+        btnDownload.disabled = true;
+        btnDownload.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> PREPARING DOCUMENT...';
+
+        try {
+            const settings = getSettings();
+            const res = await fetch('/api/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    aim,
-                    api_key: apiKey,
-                    model: modelSelect.value,
-                    mock,
+                    experiments: generatedExperiments,
+                    settings: settings
                 }),
             });
 
-            const data = await res.json().catch(() => ({ error: `Server error: ${res.status}` }));
-            
-            if (!res.ok || data.error) {
-                throw new Error(data.error || `Server error: ${res.status}`);
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Server rejected bundle request.');
             }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = settings.outputFilename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            showToast("Document bundle exported.", "success");
+            terminalLog("➜ Export successful. Project completed.");
+        } catch (err) {
+            console.error(err);
+            showToast(`Bundle export error: ${err.message}`, "error");
+            terminalLog(`➜ CRITICAL: ${err.message}`);
+        } finally {
+            btnDownload.disabled = false;
+            btnDownload.innerHTML = '<span class="material-symbols-outlined text-[18px]">cloud_download</span> DOWNLOAD DOCUMENT';
+        }
+    });
+}
+
+function renderExperimentWaitlist() {
+    experimentGrid.innerHTML = '';
+    parsedAims.forEach((aim, i) => {
+        const card = document.createElement('div');
+        card.className = "glass-card p-6 rounded-2xl flex flex-col gap-4 border-l-4 border-l-slate-200 shadow-sm opacity-60 spring-transition";
+        card.id = `exp-card-${i}`;
+        card.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="status-indicator px-2 py-1 rounded-md bg-slate-100 text-slate-400 text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                   <span class="size-1.5 rounded-full bg-slate-400"></span> QUEUED
+                </div>
+                <span class="text-[9px] font-mono text-slate-300">EXP-${(i + 1).toString().padStart(3, '0')}</span>
+            </div>
+            <h3 class="font-bold text-slate-800 line-clamp-1">${aim.split(':')[1]?.trim() || aim.slice(0, 30)}</h3>
+            <p class="text-[11px] text-slate-500 line-clamp-2 italic leading-relaxed">${aim}</p>
+        `;
+        experimentGrid.appendChild(card);
+    });
+
+    // Reset progress
+    overallProgressBar.style.width = '0%';
+    overallPercent.textContent = '0%';
+    btnNextToP4.classList.add('hidden');
+    terminalLog("➜ Initializing neural stack...");
+}
+
+async function startGeneration() {
+    generatedExperiments = [];
+    const apiKey = apiKeyInput.value.trim();
+    const model = modelInputs();
+
+    terminalLog(`➜ Target Model: ${model.toUpperCase()}`);
+
+    for (let i = 0; i < parsedAims.length; i++) {
+        const aim = parsedAims[i];
+        const card = $(`#exp-card-${i}`);
+
+        // Processing State
+        card.classList.remove('opacity-60', 'border-l-slate-200');
+        card.classList.add('border-l-primary', 'shadow-md');
+        const indicator = card.querySelector('.status-indicator');
+        indicator.className = "status-indicator px-2 py-1 rounded-md bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest flex items-center gap-1";
+        indicator.innerHTML = '<span class="size-1.5 rounded-full bg-primary animate-ping"></span> SYNTHESIZING';
+
+        terminalLog(`➜ Processing Seed ${i + 1}/${parsedAims.length}...`);
+
+        try {
+            const res = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ aim, api_key: apiKey, model })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
 
             generatedExperiments.push({ aim, ...data });
 
-            if (cards[i]) {
-                cards[i].querySelector('.exp-status').textContent = '✅';
-            }
+            // Success State
+            card.classList.replace('border-l-primary', 'border-l-emerald-500');
+            indicator.className = "status-indicator px-2 py-1 rounded-md bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest flex items-center gap-1";
+            indicator.innerHTML = '<span class="material-symbols-outlined text-[10px]">check_circle</span> COMPLETE';
+            terminalLog(`✔ Seed ${i + 1} synthesized successfully.`);
         } catch (err) {
-            console.error(`Experiment ${i + 1} Error:`, err);
-            showToast(`Experiment ${i + 1} failed: ${err.message}`, 'error');
-            // Push a fallback
-            generatedExperiments.push({
-                aim,
-                concept: 'Generation failed — see error toast.',
-                code: '// Error generating code',
-                output: 'Error',
-                caption: 'Error',
-            });
-            if (cards[i]) {
-                cards[i].querySelector('.exp-status').textContent = '❌';
-            }
+            showToast(`Logic node ${i + 1} failed.`, 'error');
+            card.classList.replace('border-l-primary', 'border-l-red-500');
+            indicator.className = "status-indicator px-2 py-1 rounded-md bg-red-50 text-red-500 text-[9px] font-black uppercase tracking-widest flex items-center gap-1";
+            indicator.innerHTML = '<span class="material-symbols-outlined text-[10px]">error</span> FAILED';
+            terminalLog(`✖ Seed ${i + 1} synthesis error: ${err.message}`);
         }
+
+        // Update Overall Progress
+        const pct = Math.round(((i + 1) / parsedAims.length) * 100);
+        overallProgressBar.style.width = `${pct}%`;
+        overallPercent.textContent = `${pct}%`;
     }
 
-    // Done
-    progressFill.style.width = '100%';
-    progressPercent.textContent = '100%';
-    progressText.textContent = 'All experiments generated!';
+    showToast("Global neural synthesis resolved.", "success");
+    terminalLog("➜ All active pathways resolved. Synthesis session ended.");
+    btnNextToP4.classList.remove('hidden');
+    renderFinalArtifacts();
+}
 
-    // Render results
-    renderResults();
-
-    btnGenerate.disabled = false;
-    btnGenerate.classList.remove('loading');
-    btnBackToAims.disabled = false;
-
-    setStep(4);
-    showSection(sectionDownload);
-    showToast('Generation complete!', 'success');
-});
-
-function renderResults() {
-    resultsList.innerHTML = '';
+function renderFinalArtifacts() {
+    const list = $('#artifacts-list');
+    list.innerHTML = '';
     generatedExperiments.forEach((exp, i) => {
-        const card = document.createElement('div');
-        card.className = 'result-card';
-        card.style.animationDelay = `${i * 0.08}s`;
-        card.innerHTML = `
-            <div class="result-card-header" data-index="${i}">
-                <h3>
-                    <span class="exp-num">${i + 1}</span>
-                    ${escapeHtml(exp.aim.length > 70 ? exp.aim.slice(0, 70) + '...' : exp.aim)}
-                </h3>
-                <span class="result-toggle">▾</span>
+        const item = document.createElement('div');
+        item.className = "glass-panel rounded-2xl p-1 overflow-hidden transition-all hover:shadow-lg border border-slate-100 bg-white shadow-sm";
+        item.innerHTML = `
+            <div class="flex items-center justify-between p-4 group">
+                <button class="flex items-center gap-4 text-left flex-1" onclick="this.parentElement.nextElementSibling.classList.toggle('hidden')">
+                    <div class="size-10 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center group-hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined">description</span>
+                    </div>
+                    <div>
+                        <p class="font-bold text-slate-900 leading-none">Experiment ${(i + 1).toString().padStart(2, '0')}</p>
+                        <p class="text-[10px] text-slate-400 mt-1 font-mono uppercase tracking-widest">${exp.code ? 'Ready for Export' : 'In Progress'}</p>
+                    </div>
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="promptRefine(${i})" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-primary hover:bg-primary/5 transition-all border border-transparent hover:border-primary/20">
+                        <span class="material-symbols-outlined text-sm">edit_note</span> REFINE
+                    </button>
+                </div>
             </div>
-            <div class="result-card-body" id="result-body-${i}">
-                <div class="result-section">
-                    <h4>Concept</h4>
-                    <p>${escapeHtml(exp.concept)}</p>
+            <div class="hidden px-6 pb-8 text-sm text-slate-600 leading-relaxed space-y-6 border-t border-slate-50 pt-6 bg-slate-50/30">
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Experiment Concept</h4>
+                    <p class="text-slate-900 font-medium">${exp.concept}</p>
                 </div>
-                <div class="result-section">
-                    <h4>Code</h4>
-                    <pre>${escapeHtml(exp.code)}</pre>
+                
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Source Code</h4>
+                    <div class="bg-slate-950 rounded-xl p-6 font-mono text-[11px] text-slate-300 overflow-x-auto shadow-inner border border-slate-800">
+                        <pre><code>${exp.code || '// No code provided.'}</code></pre>
+                    </div>
                 </div>
-                <div class="result-section result-output">
-                    <h4>Terminal Output</h4>
-                    <pre>${escapeHtml(exp.output)}</pre>
+
+                <div class="space-y-2">
+                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Program Output</h4>
+                    <div class="bg-slate-900 rounded-xl p-5 font-mono text-[11px] text-emerald-400 overflow-x-auto shadow-inner border border-slate-800">
+                        <pre><code>${exp.output || '// No output recorded.'}</code></pre>
+                    </div>
                 </div>
-                <div class="result-section">
-                    <h4>Caption</h4>
-                    <p>${escapeHtml(exp.caption)}</p>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-100 mt-4">
+                    <div class="flex items-center gap-2">
+                        <span class="size-2 rounded-full bg-emerald-500"></span>
+                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-wider">${exp.caption}</p>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-300 uppercase tracking-tighter">Experiment Verified</span>
                 </div>
             </div>
         `;
-        resultsList.appendChild(card);
-    });
-
-    // Add toggle listeners
-    resultsList.querySelectorAll('.result-card-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const idx = header.dataset.index;
-            const body = $(`#result-body-${idx}`);
-            const toggle = header.querySelector('.result-toggle');
-            body.classList.toggle('open');
-            toggle.classList.toggle('open');
-        });
+        list.appendChild(item);
     });
 }
 
-// ========== Download ==========
-btnDownload.addEventListener('click', async () => {
-    if (generatedExperiments.length === 0) {
-        showToast('No experiments to download', 'error');
-        return;
-    }
+window.promptRefine = async (index) => {
+    const change = prompt("What modifications would you like for this experiment?\n(e.g., 'Make it in Python', 'Add more comments', 'Explain focus on loops')");
+    if (!change) return;
 
-    btnDownload.disabled = true;
-    btnDownload.classList.add('loading');
+    const exp = generatedExperiments[index];
+    const originalAim = exp.aim;
+    const refinedAim = `Original Aim: ${originalAim}\nRequested Change: ${change}`;
+
+    showToast(`Refining Experiment ${index + 1}...`, 'info');
+    terminalLog(`➜ Updating Experiment ${index + 1} with requested changes...`);
 
     try {
-        const res = await fetch('/api/download', {
+        const apiKey = apiKeyInput.value.trim();
+        const model = modelInputs();
+
+        const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                experiments: generatedExperiments,
-                settings: getSettings(),
-            }),
+            body: JSON.stringify({ aim: refinedAim, api_key: apiKey, model })
         });
 
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `Server error: ${res.status}`);
-        }
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
 
-        // Download the blob
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = getSettings().outputFilename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-
-        showToast('Document downloaded successfully!', 'success');
+        generatedExperiments[index] = { aim: originalAim, ...data };
+        renderFinalArtifacts();
+        showToast(`Node ${index + 1} refined successfully.`, 'success');
+        terminalLog(`✔ Node ${index + 1} overrides applied.`);
     } catch (err) {
-        showToast(`Download failed: ${err.message}`, 'error');
-    } finally {
-        btnDownload.disabled = false;
-        btnDownload.classList.remove('loading');
+        showToast(`Refinement failed: ${err.message}`, 'error');
+        terminalLog(`✖ Node ${index + 1} override error: ${err.message}`);
     }
-});
+};
 
-btnBackToGenerate.addEventListener('click', () => {
-    setStep(3);
-    showSection(sectionGenerate);
-});
-
-// ========== Helpers ==========
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function terminalLog(msg) {
+    const log = $('#terminal-log');
+    const p = document.createElement('p');
+    p.className = "mt-1 animate-in fade-in slide-in-from-left-2 duration-300";
+    p.textContent = msg;
+    log.appendChild(p);
+    log.scrollTop = log.scrollHeight;
 }
 
-// ========== Init ==========
-loadFromLocalStorage();
+function showToast(message, type = 'info') {
+    const container = $('#toast-container');
+    const toast = document.createElement('div');
+    const colors = {
+        success: 'bg-emerald-500',
+        error: 'bg-red-500',
+        info: 'bg-primary',
+        warning: 'bg-amber-500'
+    };
+    const icons = {
+        success: 'verified',
+        error: 'report',
+        info: 'info',
+        warning: 'warning'
+    };
+
+    toast.className = `${colors[type]} text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 font-bold animate-in slide-in-from-bottom-5 duration-500 border border-white/20`;
+    toast.innerHTML = `<span class="material-symbols-outlined text-[20px]">${icons[type]}</span> <span class="text-sm">${message}</span>`;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('animate-out', 'fade-out', 'slide-out-to-bottom-5');
+        setTimeout(() => toast.remove(), 500);
+    }, 5000);
+}
+
+function saveToLocalStorage() {
+    localStorage.setItem('practigen_api_key_v5', apiKeyInput.value);
+}
+
+function loadFromLocalStorage() {
+    apiKeyInput.value = localStorage.getItem('practigen_api_key_v5') || '';
+}
+
+// Start
+init();
