@@ -23,7 +23,7 @@ PractiGen is an AI-powered tool designed to automate the creation of programming
 
 1. **Clone the repository**:
    ```bash
-   git clone <https://github.com/tanish19078/assignment-bulk>
+   git clone https://github.com/tanish19078/assignment-bulk
    cd frontend
    ```
 
@@ -50,5 +50,6 @@ PractiGen is an AI-powered tool designed to automate the creation of programming
 
 ---
 Built with ⚡ by PractiGen.
+
 
 
