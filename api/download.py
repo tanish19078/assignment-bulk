@@ -78,27 +78,42 @@ def add_caption_para(doc, text, experiment_no, font_name="Times New Roman", size
 def create_terminal_image(output_text, img_width=600):
     font_size = 14
     padding = 20
-
-    try:
-        font = ImageFont.truetype("consola.ttf", font_size)
-    except IOError:
+    
+    # Cloud-safe fonts (Linux/Universal) + Windows Fallbacks
+    font = None
+    windir = os.environ.get('WINDIR', 'C:\\Windows')
+    paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        os.path.join(windir, 'Fonts', 'consola.ttf'),
+        os.path.join(windir, 'Fonts', 'cour.ttf'),
+        "DejaVuSansMono.ttf"
+    ]
+    
+    for p in paths:
         try:
-            font = ImageFont.truetype("cour.ttf", font_size)
-        except IOError:
-            font = ImageFont.load_default()
+            if os.path.exists(p):
+                font = ImageFont.truetype(p, font_size)
+                break
+        except: continue
+        
+    if font is None:
+        font = ImageFont.load_default()
 
-    lines = output_text.split('\n')
-    line_height = font_size + 4
+    lines = str(output_text).split('\n')
+    line_height = font_size + 4 
     height = (len(lines) * line_height) + (2 * padding)
-
+    
     img = Image.new('RGB', (img_width, height), color=(30, 30, 30))
     d = ImageDraw.Draw(img)
-
+    
     y = padding
     for line in lines:
-        d.text((padding, y), line, font=font, fill=(200, 200, 200))
+        try:
+            d.text((padding, y), line.replace('\r', ''), font=font, fill=(210, 210, 210))
+        except: pass
         y += line_height
-
+        
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     buf.seek(0)

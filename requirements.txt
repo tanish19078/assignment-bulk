@@ -3,3 +3,4 @@ python-docx
 Pillow
 Flask
 Flask-CORS
+sarvamai

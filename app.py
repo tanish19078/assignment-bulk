@@ -3,23 +3,25 @@ import re
 import io
 import time
 import os
+import traceback
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv()
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from PIL import Image, ImageDraw, ImageFont
+from sarvamai import SarvamAI
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 CORS(app)
 
-
-# ==================== Static Frontend ====================
 @app.route('/')
 def serve_index():
     return send_from_directory('public', 'index.html')
-
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -51,16 +53,44 @@ def api_generate():
         aim = data.get('aim', '')
         api_key = data.get('api_key', '')
         model = data.get('model', 'llama-3.3-70b-versatile')
-        mock = data.get('mock', False)
 
-        if mock or not api_key:
-            result = {
-                'concept': f'This experiment demonstrates fundamental programming concepts relevant to: {aim[:80]}...',
-                'code': f'#include <stdio.h>\n\nint main() {{\n    // Code for: {aim[:40]}\n    printf("Executing experiment...\\n");\n    return 0;\n}}',
-                'output': 'Executing experiment...\nOperation Successful.',
-                'caption': f'Terminal output for {aim[:25]}'
-            }
+        if "sarvam" in model.lower():
+            if not api_key:
+                api_key = os.getenv("SARVAM_API_KEY")
+            if not api_key:
+                raise ValueError("SARVAM_API_KEY not found.")
+            client = SarvamAI(api_subscription_key=api_key)
+            prompt = f"""You are a professional programming lab assistant with expertise in Indian languages. For this experiment aim:
+
+"{aim}"
+
+Identify the most appropriate programming language for this aim (e.g., C, JavaScript, Python, etc.) and provide the following:
+
+Respond EXACTLY in this format (use these exact tags):
+
+[CONCEPT]
+Write 3-4 lines explaining the programming concepts used. Academic style. 
+CRITICAL: If the aim is written in an Indian language (like Hindi, Telugu, Tamil, Marathi, etc.), write this CONCEPT section in that same Indian language. Otherwise, use English.
+
+[CODE]
+Write the complete working source code. Plain code only, no markdown fences. Code should use standard English keywords (typical for programming).
+
+[OUTPUT]
+Show the realistic expected terminal or console output when this program runs.
+
+[CAPTION]
+Write a very short (3-5 words) descriptive caption for the terminal output screenshot.
+If the aim is in an Indian language, write this caption in that same language.
+"""
+            messages = [{"role": "user", "content": prompt}]
+            response = client.chat.completions(messages=messages, model=model)
+            text = response.choices[0].message.content
         else:
+            if not api_key:
+                api_key = os.getenv("GROQ_API_KEY")
+            if not api_key:
+                raise ValueError("GROQ_API_KEY not found in session or environment.")
+
             from groq import Groq
             client = Groq(api_key=api_key)
 
@@ -90,43 +120,46 @@ Write a very short (3-5 words) descriptive caption for the terminal output scree
             )
             text = chat_completion.choices[0].message.content
 
-            # Robust Parsing using Regex
-            def extract_section(tag, text):
-                pattern = rf"\[{tag}\](.*?)(\[|$)"
-                match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-                return match.group(1).strip() if match else None
+        def extract_section(tag, text):
+            pattern = rf"\[{tag}\](.*?)(\[|$)"
+            match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+            return match.group(1).strip() if match else None
 
-            concept = extract_section("CONCEPT", text)
-            code = extract_section("CODE", text)
-            output_part = extract_section("OUTPUT", text)
-            caption = extract_section("CAPTION", text)
+        concept = extract_section("CONCEPT", text)
+        code = extract_section("CODE", text)
+        output_part = extract_section("OUTPUT", text)
+        caption = extract_section("CAPTION", text)
 
-            # Fallback if tags are missing or malformed
-            if not all([concept, code, output_part, caption]):
-                # Try to see if we can at least find CODE or CONCEPT
-                if not concept: concept = "No concept description provided by API."
-                if not code: code = "// No code provided for this experiment."
-                if not output_part: output_part = "No output provided."
-                if not caption: caption = "Experiment Output"
-                
-                # If everything is missing, then it's truly malformed
-                if "[CONCEPT]" not in text.upper() and "[CODE]" not in text.upper():
-                    raise ValueError('Malformed API response — missing expected tags')
+        # Fallback if tags are missing or malformed
+        if not all([concept, code, output_part, caption]):
+            if not concept: concept = "No concept description provided by API."
+            if not code: code = "// No code provided for this experiment."
+            if not output_part: output_part = "No output provided."
+            if not caption: caption = "Experiment Output"
+            
+            if "[CONCEPT]" not in text.upper() and "[CODE]" not in text.upper():
+                raise ValueError('Malformed API response — missing expected tags')
 
-            # Clean up markdown fences if present
-            code = re.sub(r'```[a-zA-Z]*', '', code).replace('```', '').strip()
-            output_part = re.sub(r'```', '', output_part).strip()
+        # Clean up markdown fences if present
+        code = re.sub(r'```[a-zA-Z]*', '', code).replace('```', '').strip()
+        output_part = re.sub(r'```', '', output_part).strip()
 
-            result = {
-                'concept': concept,
-                'code': code,
-                'output': output_part,
-                'caption': caption
-            }
+        result = {
+            'concept': concept,
+            'code': code,
+            'output': output_part,
+            'caption': caption
+        }
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        error_msg = str(e)
+        status_code = 500
+        if "401" in error_msg or "Invalid API Key" in error_msg or "Authentication" in error_msg:
+            status_code = 401
+        elif "429" in error_msg or "Rate limit" in error_msg:
+            status_code = 429
+        return jsonify({'error': error_msg}), status_code
 
 
 # ==================== API: Download .docx ====================
@@ -183,25 +216,41 @@ def add_caption_para(doc, text, experiment_no, font_name='Times New Roman', size
 def create_terminal_image(output_text, img_width=600):
     font_size = 14
     padding = 20
-    try:
-        font = ImageFont.truetype('consola.ttf', font_size)
-    except IOError:
+    windir = os.environ.get('WINDIR', 'C:\\Windows')
+    font_paths = [
+        os.path.join(windir, 'Fonts', 'consola.ttf'),
+        os.path.join(windir, 'Fonts', 'cour.ttf'),
+        os.path.join(windir, 'Fonts', 'arial.ttf'),
+        'consola.ttf', 
+        'cour.ttf'
+    ]
+    
+    font = None
+    for path in font_paths:
         try:
-            font = ImageFont.truetype('cour.ttf', font_size)
-        except IOError:
-            font = ImageFont.load_default()
+            # Pillow's truetype can often find the font by name, but absolute path is safer
+            font = ImageFont.truetype(path, font_size)
+            break
+        except:
+            continue
+            
+    if font is None:
+        font = ImageFont.load_default()
 
-    lines = output_text.split('\n')
-    line_height = font_size + 4
+    # Height Calculation
+    lines = str(output_text).split('\n')
+    line_height = font_size + 4 
     height = (len(lines) * line_height) + (2 * padding)
-
     img = Image.new('RGB', (img_width, height), color=(30, 30, 30))
     d = ImageDraw.Draw(img)
     y = padding
     for line in lines:
-        d.text((padding, y), line, font=font, fill=(200, 200, 200))
+        try:
+            d.text((padding, y), line.replace('\r', ''), font=font, fill=(210, 210, 210))
+        except:
+            pass
         y += line_height
-
+        
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     buf.seek(0)
@@ -225,7 +274,13 @@ def add_normal_para(doc, text, font_name='Times New Roman', size=12, align=None)
 def api_download():
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data received for export.'}), 400
+            
         experiments = data.get('experiments', [])
+        if not experiments:
+            return jsonify({'error': 'No experiment artifacts found to bundle.'}), 400
+            
         settings = data.get('settings', {})
 
         font_name = settings.get('fontName', 'Times New Roman')
@@ -240,11 +295,11 @@ def api_download():
         doc = Document()
 
         for i, exp in enumerate(experiments, 1):
-            aim = exp.get('aim', '')
-            concept = exp.get('concept', '')
-            code = exp.get('code', '')
-            output = exp.get('output', '')
-            caption = exp.get('caption', '')
+            aim = exp.get('aim', 'N/A')
+            concept = exp.get('concept', 'No concept description provided.')
+            code = exp.get('code', '// No code available.')
+            output = exp.get('output', 'Program executed successfully.')
+            caption = exp.get('caption', 'Terminal Output Preview')
 
             # Experiment heading
             p = doc.add_paragraph()
@@ -271,8 +326,9 @@ def api_download():
                 run = pic_para.add_run()
                 run.add_picture(img_buf, width=Inches(image_width_inches))
                 add_caption_para(doc, caption, i, font_name, caption_size)
-            except Exception as e:
-                add_normal_para(doc, f'[Error adding image: {e}]', font_name, body_size)
+            except Exception as img_err:
+                print(f"DEBUG: Error creating terminal image: {img_err}")
+                add_normal_para(doc, f'[Visual Output Unavailable - Log Trace follows]', font_name, body_size)
                 add_code_para(doc, output, font_name, code_size)
 
             if i < len(experiments):
@@ -289,7 +345,8 @@ def api_download():
             download_name=output_filename
         )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"CRITICAL EXPORT ERROR: {traceback.format_exc()}")
+        return jsonify({'error': f'Export Pipeline Fault: {str(e)}'}), 500
 
 
 if __name__ == '__main__':

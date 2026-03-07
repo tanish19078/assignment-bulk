@@ -2,6 +2,626 @@
 <html lang="en">
 
 <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>PractiGen — Workspace</title>
+
+    <!-- Fonts & Icons -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+
+    <link rel="stylesheet" href="style.css">
+
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0d0df2",
+                        "background-light": "#f5f5f8",
+                        "background-dark": "#101022",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "heading": ["Plus Jakarta Sans", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+
+<body
+    class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen relative mesh-gradient">
+    <div class="fixed inset-0 grain-overlay z-50"></div>
+
+    <div class="flex h-screen overflow-hidden group/design-root">
+        <!-- Sidebar Navigation -->
+        <aside
+            class="w-64 border-r border-slate-200/50 dark:border-slate-800/50 flex flex-col z-40 bg-white/50 backdrop-blur-md">
+            <div class="p-6 flex items-center gap-3">
+                <div
+                    class="size-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 hyper-gradient">
+                    <span class="material-symbols-outlined font-bold">deployed_code</span>
+                </div>
+                <div class="flex flex-col">
+                    <h1 class="font-heading text-lg font-extrabold tracking-tight text-slate-900 leading-none">PractiGen
+                    </h1>
+                    <span class="text-[10px] font-mono uppercase tracking-widest text-primary/60 font-bold">AI
+                        Powered</span>
+                </div>
+            </div>
+            <nav class="flex-1 px-4 space-y-1 mt-4">
+                <button id="nav-dashboard"
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/5 text-primary font-medium spring-transition">
+                    <span class="material-symbols-outlined text-[22px]">dashboard</span>
+                    <span class="text-sm">Overview</span>
+                </button>
+                <button id="nav-workspace"
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors spring-transition">
+                    <span class="material-symbols-outlined text-[22px]">account_tree</span>
+                    <span class="text-sm font-medium">New Project</span>
+                </button>
+            </nav>
+            <div class="p-4 border-t border-slate-100 dark:border-slate-800">
+                <div class="glass-card rounded-xl p-4 flex flex-col gap-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-mono text-slate-400 uppercase">System Integrity</span>
+                        <span class="text-[10px] font-mono text-primary font-bold">STABLE</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-primary rounded-full w-full"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col h-full bg-white dark:bg-background-dark relative overflow-hidden">
+            <!-- Top Header (Common) -->
+            <header
+                class="h-16 border-b border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between px-8 bg-white/30 backdrop-blur-sm shrink-0 z-30">
+                <div id="breadcrumb-area"
+                    class="flex items-center gap-4 text-xs font-medium text-slate-400 uppercase tracking-widest">
+                    <span id="breadcrumb-main">Overview</span>
+                    <span class="material-symbols-outlined text-xs hidden" id="breadcrumb-sep-1">chevron_right</span>
+                    <span id="breadcrumb-sub" class="hidden text-primary font-bold">Active Project</span>
+                </div>
+                <div class="flex items-center gap-6">
+                    <button class="relative text-slate-500 hover:text-slate-900 transition-colors">
+                        <span class="material-symbols-outlined">notifications</span>
+                        <span
+                            class="absolute top-0 right-0 size-2 bg-primary rounded-full border-2 border-white"></span>
+                    </button>
+                    <div class="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right hidden sm:block">
+                            <p class="text-sm font-bold text-slate-900 dark:text-white leading-none">Researcher Mode</p>
+                            <p class="text-[11px] font-mono text-primary uppercase mt-1 italic">V5 Pro</p>
+                        </div>
+                        <div class="size-10 rounded-full bg-slate-200 border-2 border-white shadow-sm overflow-hidden">
+                            <img class="w-full h-full object-cover"
+                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfSYp9Jkp_oSS3ubA_87FNphIwHVlDHi416Mds4i-hOKKCzhLvNGxR_HXlWr9DNHoWt6mqQUmLCoLpbPoJfQv-zVhpYm3Hsdrtc6OCNfQSNNIdSSM0pEZqgIJDodV3-pvh17SsrZyC8ddtLqL5oDWVf_NegRWe-FMwNSGIawmH36YuZ_SSPBYx2pOHzjUoE8JXTpszAus_VKHyp2M1Q4kr-oeBLB28aCFFpmelwYjwlyMUMFEgyS7rvx0bIQ16wUnaeYVjIdjK1QV0" />
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dynamic Section Container -->
+            <main id="main-scroll" class="flex-1 overflow-y-auto p-8 scroll-smooth z-20">
+
+                <!-- SECTION: DASHBOARD (Overview) -->
+                <section id="section-dashboard" class="space-y-8">
+                    <div class="flex flex-wrap items-end justify-between gap-6">
+                        <div>
+                            <h2
+                                class="font-heading text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                                Welcome, Researcher.</h2>
+                            <div class="flex items-center gap-4 mt-3">
+                                <div
+                                    class="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold border border-emerald-100">
+                                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                    ALL SYSTEMS NOMINAL
+                                </div>
+                                <p class="text-slate-500 text-sm font-medium">Ready to synthesize new practical
+                                    documentation.</p>
+                            </div>
+                        </div>
+                        <button id="btn-launch"
+                            class="bg-primary text-white px-8 py-4 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center gap-2 hyper-gradient magnetic-button">
+                            <span class="material-symbols-outlined text-lg">add_circle</span>
+                            Start New Project
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div
+                            class="glass-card p-8 rounded-2xl flex flex-col gap-6 border-l-4 border-l-primary hover:shadow-xl transition-shadow bg-white/80">
+                            <div
+                                class="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                                <span class="material-symbols-outlined text-2xl">auto_awesome</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-xl mb-2">Automated Synthesis</h3>
+                                <p class="text-sm text-slate-500 leading-relaxed font-medium">Generate high-fidelity
+                                    theory, code, and validation outputs for your practical lab documents in seconds.
+                                </p>
+                            </div>
+                            <button onclick="navWorkspace.click()"
+                                class="text-primary font-bold text-sm flex items-center gap-1 hover:gap-2 transition-all">Start
+                                Pipeline <span class="material-symbols-outlined text-sm">arrow_forward</span></button>
+                        </div>
+                        <div
+                            class="glass-card p-8 rounded-2xl flex flex-col gap-6 border-l-4 border-l-indigo-400 hover:shadow-xl transition-shadow bg-white/80">
+                            <div
+                                class="size-14 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
+                                <span class="material-symbols-outlined text-2xl">translate</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-xl mb-2">Indian Context AI</h3>
+                                <p class="text-sm text-slate-500 leading-relaxed font-medium">Full support for Hindi,
+                                    Telugu, Tamil and more via Sarvam AI. Perfect for regional academic boards.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECTION: STEPPER & WORKSPACE FLOW -->
+                <section id="section-workspace" class="hidden space-y-10">
+                    <!-- Phase Stepper -->
+                    <div id="phase-stepper" class="w-full max-w-4xl mx-auto">
+                        <div class="relative flex justify-between">
+                            <div
+                                class="absolute top-1/2 left-0 w-full h-0.5 bg-slate-200 dark:bg-slate-800 -translate-y-1/2 z-0">
+                            </div>
+                            <div id="stepper-progress"
+                                class="absolute top-1/2 left-0 w-0 h-0.5 bg-primary -translate-y-1/2 transition-all duration-700 z-0">
+                            </div>
+
+                            <div class="relative z-10 flex flex-col items-center group step-item active" data-step="1">
+                                <div
+                                    class="size-10 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-white dark:ring-background-dark shadow-xl spring-transition icon-container">
+                                    <span class="material-symbols-outlined text-lg">settings</span>
+                                </div>
+                                <span
+                                    class="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-900 dark:text-white">Setup</span>
+                            </div>
+                            <div class="relative z-10 flex flex-col items-center group step-item" data-step="2">
+                                <div
+                                    class="size-10 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 ring-4 ring-white dark:ring-background-dark spring-transition icon-container">
+                                    <span class="material-symbols-outlined text-lg">target</span>
+                                </div>
+                                <span
+                                    class="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Aims</span>
+                            </div>
+                            <div class="relative z-10 flex flex-col items-center group step-item" data-step="3">
+                                <div
+                                    class="size-10 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 ring-4 ring-white dark:ring-background-dark spring-transition icon-container">
+                                    <span class="material-symbols-outlined text-lg">auto_awesome</span>
+                                </div>
+                                <span
+                                    class="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Synthesis</span>
+                            </div>
+                            <div class="relative z-10 flex flex-col items-center group step-item" data-step="4">
+                                <div
+                                    class="size-10 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 ring-4 ring-white dark:ring-background-dark spring-transition icon-container">
+                                    <span class="material-symbols-outlined text-lg">ios_share</span>
+                                </div>
+                                <span
+                                    class="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Export</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PHASE 1: CONFIGURE -->
+                    <div id="phase-1" class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div class="lg:col-span-2 space-y-6">
+                                <div
+                                    class="glass-panel p-6 rounded-2xl border-slate-200/50 shadow-sm overflow-hidden relative">
+                                    <div class="flex items-center gap-2 mb-6">
+                                        <span class="material-symbols-outlined text-primary">key</span>
+                                        <h3 class="text-lg font-bold font-heading">Credential Matrix</h3>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <label
+                                                class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Neural
+                                                API Key (Dynamic Detection)</label>
+                                            <div class="relative">
+                                                <input id="api-key" type="password"
+                                                    class="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20 transition-all font-mono"
+                                                    placeholder="Leave empty to use system defaults...">
+                                                <button id="toggle-api-visibility"
+                                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors">
+                                                    <span class="material-symbols-outlined text-xl">visibility</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="glass-panel p-6 rounded-2xl border-slate-200/50 shadow-sm">
+                                    <div class="flex items-center gap-2 mb-6">
+                                        <span class="material-symbols-outlined text-primary">psychology</span>
+                                        <h3 class="text-lg font-bold font-heading">Intelligence Selection</h3>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <!-- Sarvam Models -->
+                                        <div class="relative">
+                                            <input type="radio" name="model" id="m-sarvam-1" class="peer hidden" checked
+                                                value="sarvam-30b">
+                                            <label for="m-sarvam-1"
+                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">Sarvam 30B</span>
+                                                    <span
+                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Advanced reasoning & multilingual.
+                                                </p>
+                                            </label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="model" id="m-sarvam-2" class="peer hidden"
+                                                value="sarvam-105b">
+                                            <label for="m-sarvam-2"
+                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">Sarvam 105B</span>
+                                                    <span
+                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Highest performance model.</p>
+                                            </label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="model" id="m-sarvam-3" class="peer hidden"
+                                                value="sarvam-m">
+                                            <label for="m-sarvam-3"
+                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">Sarvam M</span>
+                                                    <span
+                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Efficient reasoning (Open
+                                                    Weights).</p>
+                                            </label>
+                                        </div>
+                                        <!-- Llama Models -->
+                                        <div class="relative">
+                                            <input type="radio" name="model" id="m-llama-1" class="peer hidden"
+                                                value="llama-3.3-70b-versatile">
+                                            <label for="m-llama-1"
+                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">Llama 3.3 70B</span>
+                                                    <span
+                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Advanced logic (Groq).</p>
+                                            </label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="model" id="m-llama-2" class="peer hidden"
+                                                value="llama-3.1-8b-instant">
+                                            <label for="m-llama-2"
+                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">Llama 3.1 8B</span>
+                                                    <span
+                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Instant generation.</p>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                                    <button id="toggle-advanced"
+                                        class="w-full p-4 flex items-center justify-between font-bold hover:bg-slate-50 transition-colors">
+                                        <div class="flex items-center gap-3">
+                                            <span class="material-symbols-outlined text-primary">tune</span>
+                                            <span class="text-sm">Document Typography & Formatting</span>
+                                        </div>
+                                        <span class="material-symbols-outlined text-slate-400 transition-transform"
+                                            id="advanced-arrow">expand_more</span>
+                                    </button>
+                                    <div id="advanced-settings-tray"
+                                        class="hidden p-6 border-t border-slate-100 space-y-6 bg-slate-50/30">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label
+                                                    class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Font
+                                                    Family</label>
+                                                <select id="setting-font"
+                                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                                                    <option value="Times New Roman" selected>Times New Roman (Serif)
+                                                    </option>
+                                                    <option value="Inter">Inter (Sans)</option>
+                                                    <option value="Courier New">Courier New (Mono)</option>
+                                                    <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label
+                                                    class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Heading
+                                                    Size (pt)</label>
+                                                <input id="setting-heading-size" type="number" value="14"
+                                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                            <div>
+                                                <label
+                                                    class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Body
+                                                    Size (pt)</label>
+                                                <input id="setting-body-size" type="number" value="12"
+                                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                            <div>
+                                                <label
+                                                    class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Code
+                                                    Size (pt)</label>
+                                                <input id="setting-code-size" type="number" value="12"
+                                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                        </div>
+                                        <div
+                                            class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                                            <div>
+                                                <label
+                                                    class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Image
+                                                    Width (Inches)</label>
+                                                <input id="setting-img-width" type="number" value="5"
+                                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                            <div>
+                                                <label
+                                                    class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Terminal
+                                                    Width (px)</label>
+                                                <input id="setting-term-width" type="number" value="600"
+                                                    class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="space-y-6">
+                                <div class="glass-panel p-6 rounded-2xl border-slate-200/50 bg-white">
+                                    <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-6">
+                                        System Status</h3>
+                                    <div class="space-y-6">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex flex-col">
+                                                <span class="text-sm font-bold">AI Generation Engine</span>
+                                                <span class="text-[11px] text-slate-500 italic">System Ready</span>
+                                            </div>
+                                            <div class="size-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-10 space-y-3">
+                                        <button id="btn-p1-next"
+                                            class="w-full bg-primary text-white py-4 rounded-xl font-bold hyper-gradient shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+                                            <span>Proceed to Drafting</span>
+                                            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PHASE 2: AIMS -->
+                    <div id="phase-2" class="hidden space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <h1
+                                    class="font-heading text-3xl font-extrabold bg-gradient-to-r from-primary to-cyan-600 bg-clip-text text-transparent">
+                                    Experiment List</h1>
+                                <p class="text-slate-400 text-sm mt-1">Define your experiment objectives using "---" as
+                                    a delimiter.</p>
+                            </div>
+                            <div class="flex gap-3">
+                                <button id="btn-import"
+                                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-sm shadow-sm hover:shadow-md spring-transition">
+                                    <span class="material-symbols-outlined text-[18px]">upload</span> Import Aims
+                                </button>
+                                <button id="btn-sample"
+                                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-lg spring-transition">
+                                    <span class="material-symbols-outlined text-[18px]">menu_book</span> Load Samples
+                                </button>
+                            </div>
+                        </div>
+                        <div
+                            class="relative flex-1 rounded-2xl border border-slate-200/60 glass-panel flex flex-col editor-glow overflow-hidden min-h-[450px] bg-white">
+                            <div
+                                class="flex items-center justify-between px-6 py-3 bg-slate-50/50 border-b border-slate-200/50">
+                                <div class="flex items-center gap-6">
+                                    <div class="flex gap-1.5">
+                                        <div class="size-2.5 rounded-full bg-[#ff5f56]"></div>
+                                        <div class="size-2.5 rounded-full bg-[#ffbd2e]"></div>
+                                        <div class="size-2.5 rounded-full bg-[#27c93f]"></div>
+                                    </div>
+                                    <div
+                                        class="flex items-center gap-2 px-3 py-1 rounded-md bg-white border border-slate-100">
+                                        <span
+                                            class="material-symbols-outlined text-slate-400 text-sm">edit_document</span>
+                                        <span
+                                            class="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold">AIMS_MANIFEST.PGEN</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-4 text-[10px] font-mono text-slate-400">
+                                    <span class="flex items-center gap-1"><span
+                                            class="size-1.5 rounded-full bg-emerald-500"></span> EDITING</span>
+                                </div>
+                            </div>
+                            <div class="flex-1 flex overflow-hidden">
+                                <div
+                                    class="w-12 bg-slate-50/30 border-r border-slate-100 flex flex-col items-center py-6 select-none font-mono text-xs text-slate-300">
+                                    1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10</div>
+                                <textarea id="aims-textarea"
+                                    class="flex-1 p-6 bg-transparent border-none focus:ring-0 font-mono text-sm leading-[1.8] text-slate-700 placeholder-slate-300 resize-none ide-scrollbar"
+                                    placeholder="// Define experiment objectives...&#10;// Use --- to separate multiple aims.&#10;&#10;Aim 1: Implement a binary search tree...&#10;---&#10;Aim 2: Develop a REST API using Express..."></textarea>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between pt-4">
+                            <button id="btn-p2-back"
+                                class="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-white spring-transition"><span
+                                    class="material-symbols-outlined">arrow_back</span> Configure</button>
+                            <button id="btn-p2-next"
+                                class="flex items-center gap-3 px-10 py-4 rounded-xl bg-primary text-white font-bold shadow-2xl hyper-gradient spring-transition hover:scale-105">Start
+                                Generation <span class="material-symbols-outlined">bolt</span></button>
+                        </div>
+                    </div>
+
+                    <!-- PHASE 3: GENERATE -->
+                    <div id="phase-3" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div
+                            class="glass rounded-2xl p-8 mb-8 shadow-xl border border-white/50 relative overflow-hidden bg-white">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                                <div>
+                                    <h1 class="text-3xl font-heading font-extrabold text-slate-900 mb-2">AI
+                                        Generation</h1>
+                                    <p class="text-slate-500 font-medium">Creating experiment content with high-accuracy
+                                        AI models.</p>
+                                </div>
+                                <div
+                                    class="size-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin">
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-3">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-xs font-bold text-primary flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-[14px]">analytics</span>
+                                        GENERATION_STATUS
+                                    </span>
+                                    <span id="overall-percent" class="text-sm font-black text-slate-900">0%</span>
+                                </div>
+                                <div class="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="overall-progress-bar"
+                                        class="h-full rounded-full pulse-gradient transition-all duration-700"
+                                        style="width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="experiment-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <!-- Dynamic Content -->
+                        </div>
+                        <div class="flex items-center justify-between mt-10">
+                            <button id="btn-p3-back"
+                                class="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-white spring-transition"><span
+                                    class="material-symbols-outlined">arrow_back</span> Modify Aims</button>
+                            <button id="btn-p3-next"
+                                class="hidden flex items-center gap-3 px-10 py-4 rounded-xl bg-primary text-white font-bold shadow-2xl hyper-gradient spring-transition hover:scale-105">Review
+                                Result <span class="material-symbols-outlined">arrow_forward</span></button>
+                        </div>
+                    </div>
+
+                    <!-- PHASE 4: EXPORT -->
+                    <div id="phase-4" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex flex-col">
+                                <span class="text-xs font-bold text-primary tracking-widest uppercase italic">Final
+                                    Step</span>
+                                <h1 class="text-3xl font-extrabold text-slate-900">Final Document</h1>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-2xl font-black text-emerald-500">READY</span>
+                                <p class="text-[10px] font-bold text-slate-500 uppercase">Verification Passed</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div class="lg:col-span-2 flex flex-col gap-4">
+                                <div class="flex items-center gap-2 mb-2 font-bold text-lg">
+                                    <span class="material-symbols-outlined text-primary">data_object</span>
+                                    <h3>Generation Result</h3>
+                                </div>
+                                <div id="artifacts-list" class="space-y-4">
+                                    <!-- Dynamic Artifact Cards -->
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-6">
+                                <div
+                                    class="bg-slate-950 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col h-[320px]">
+                                    <div
+                                        class="bg-slate-900 px-4 py-2 flex items-center justify-between border-b border-slate-800">
+                                        <div class="flex gap-1.5">
+                                            <div class="size-2 rounded-full bg-red-500/50"></div>
+                                            <div class="size-2 rounded-full bg-amber-500/50"></div>
+                                            <div class="size-2 rounded-full bg-emerald-500/50"></div>
+                                        </div>
+                                        <span
+                                            class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">shell
+                                            — pgen</span>
+                                    </div>
+                                    <div id="terminal-log"
+                                        class="p-5 font-mono text-[11px] leading-relaxed overflow-y-auto text-slate-400">
+                                        <p class="">➜ Initializing document export...</p>
+                                        <p class="text-emerald-500">✔ All experiments generated.</p>
+                                        <p class="mt-2">Ready for download.</p>
+                                    </div>
+                                </div>
+                                <div class="glass-panel rounded-2xl p-6 border-slate-200/50 bg-white">
+                                    <button id="btn-download-all"
+                                        class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-xl flex items-center justify-center gap-3 success-shadow transition-all active:scale-95 group">
+                                        <span class="material-symbols-outlined">cloud_download</span> DOWNLOAD DOCUMENT
+                                    </button>
+                                    <button id="btn-p4-home"
+                                        class="w-full mt-3 bg-transparent border-2 border-slate-200 text-slate-600 font-bold py-3 rounded-xl text-xs hover:border-primary transition-all">RETURN
+                                        TO OVERVIEW</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <footer id="system-footer"
+                    class="mt-12 h-10 border-t border-slate-100 flex items-center justify-between shrink-0">
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-2">
+                            <span class="size-2 rounded-full bg-emerald-500"></span>
+                            <span
+                                class="text-[9px] font-mono font-black text-emerald-600 tracking-widest uppercase">Systems
+                                Stable</span>
+                        </div>
+                        <div class="text-[9px] font-mono text-slate-300">UPTIME: 99.9%</div>
+                    </div>
+                    <div class="text-[9px] font-mono text-slate-300 font-bold uppercase tracking-widest">PROJECT
+                        PRACTIGEN V5.2</div>
+                </footer>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- UI Helper -->
+    <div class="fixed bottom-8 right-8 z-50">
+        <button id="help-fab"
+            class="size-14 rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center text-slate-900 hover:scale-110 spring-transition group">
+            <span class="material-symbols-outlined text-2xl group-hover:rotate-12 transition-transform">help</span>
+        </button>
+    </div>
+
+    <!-- Hidden Inputs -->
+    <input type="file" id="aims-import-input" class="hidden" accept=".txt,.pgen,.md">
+
+    <!-- Toast Component -->
+    <div id="toast-container"
+        class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 w-full max-w-sm"></div>
+
+    <script src="script.js"></script>
+</body>
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PractiGen — Auto Practical File Generator</title>
