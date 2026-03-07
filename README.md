@@ -45,9 +45,9 @@ PractiGen is an AI-powered tool designed to automate the creation of programming
 
 - `frontend/`: Contains the main application.
   - `public/`: Static assets (HTML, CSS, JS).
-  - `api/`: Python serverless functions for parsing, generation, and downloading.a
-- `auto_prac.py`: CLI version of the generator.
+  - `api/`: Python serverless functions for parsing, generation, and downloading.
 - `aims.txt`: Sample input file for experiment aims.
 
 ---
 Built with ⚡ by PractiGen.
+
