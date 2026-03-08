@@ -1,0 +1,14 @@
+# Environment variables
+.env
+
+# Output files
+*.docx
+
+# Sample text files
+aims.txt
+js_aims.txt
+1.py
+
+# Python
+__pycache__/
+*.py[cod]
