@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "destination": "/api/index.py"
     },
     {
       "source": "/(.*)",
@@ -10,9 +10,9 @@
     }
   ],
   "functions": {
-    "api/*.py": {
+    "api/index.py": {
       "memory": 1024,
-      "maxDuration": 10
+      "maxDuration": 15
     }
   }
 }
