@@ -42,10 +42,14 @@
     class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen relative mesh-gradient">
     <div class="fixed inset-0 grain-overlay z-50"></div>
 
-    <div class="flex h-screen overflow-hidden group/design-root">
-        <!-- Sidebar Navigation -->
-        <aside
-            class="w-64 border-r border-slate-200/50 dark:border-slate-800/50 flex flex-col z-40 bg-white/50 backdrop-blur-md">
+    <div class="flex h-screen overflow-hidden group/design-root relative">
+        <!-- Sidebar overlay for mobile -->
+        <div id="sidebar-overlay"
+            class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 hidden md:hidden transition-opacity duration-300 opacity-0">
+        </div>
+
+        <aside id="app-sidebar"
+            class="w-64 border-r border-slate-200/50 dark:border-slate-800/50 flex flex-col z-50 bg-white/95 dark:bg-background-dark/95 backdrop-blur-xl absolute md:relative h-full transition-transform duration-300 -translate-x-full md:translate-x-0 shadow-2xl md:shadow-none">
             <div class="p-6 flex items-center gap-3">
                 <div
                     class="size-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 hyper-gradient">
@@ -87,9 +91,13 @@
         <div class="flex-1 flex flex-col h-full bg-white dark:bg-background-dark relative overflow-hidden">
             <!-- Top Header (Common) -->
             <header
-                class="h-16 border-b border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between px-8 bg-white/30 backdrop-blur-sm shrink-0 z-30">
+                class="h-16 border-b border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between px-4 md:px-8 bg-white/30 backdrop-blur-sm shrink-0 z-30">
                 <div id="breadcrumb-area"
-                    class="flex items-center gap-4 text-xs font-medium text-slate-400 uppercase tracking-widest">
+                    class="flex items-center gap-2 md:gap-4 text-[10px] md:text-xs font-medium text-slate-400 uppercase tracking-widest">
+                    <button id="btn-toggle-sidebar"
+                        class="md:hidden flex items-center justify-center p-1.5 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
+                        <span class="material-symbols-outlined text-[20px]">menu</span>
+                    </button>
                     <span id="breadcrumb-main">Overview</span>
                     <span class="material-symbols-outlined text-xs hidden" id="breadcrumb-sep-1">chevron_right</span>
                     <span id="breadcrumb-sub" class="hidden text-primary font-bold">Active Project</span>
@@ -115,14 +123,14 @@
             </header>
 
             <!-- Dynamic Section Container -->
-            <main id="main-scroll" class="flex-1 overflow-y-auto p-8 scroll-smooth z-20">
+            <main id="main-scroll" class="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth z-20">
 
                 <!-- SECTION: DASHBOARD (Overview) -->
                 <section id="section-dashboard" class="space-y-8">
                     <div class="flex flex-wrap items-end justify-between gap-6">
                         <div>
                             <h2
-                                class="font-heading text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                                class="font-heading text-2xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
                                 Welcome, Researcher.</h2>
                             <div class="flex items-center gap-4 mt-3">
                                 <div
@@ -135,7 +143,7 @@
                             </div>
                         </div>
                         <button id="btn-launch"
-                            class="bg-primary text-white px-8 py-4 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center gap-2 hyper-gradient magnetic-button">
+                            class="w-full md:w-auto bg-primary text-white px-8 py-4 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 hyper-gradient magnetic-button">
                             <span class="material-symbols-outlined text-lg">add_circle</span>
                             Start New Project
                         </button>
@@ -419,22 +427,23 @@
 
                     <!-- PHASE 2: AIMS -->
                     <div id="phase-2" class="hidden space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
                             <div>
                                 <h1
-                                    class="font-heading text-3xl font-extrabold bg-gradient-to-r from-primary to-cyan-600 bg-clip-text text-transparent">
+                                    class="font-heading text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-primary to-cyan-600 bg-clip-text text-transparent">
                                     Experiment List</h1>
-                                <p class="text-slate-400 text-sm mt-1">Define your experiment objectives using "---" as
+                                <p class="text-slate-400 text-xs md:text-sm mt-1">Define your experiment objectives
+                                    using "---" as
                                     a delimiter.</p>
                             </div>
-                            <div class="flex gap-3">
+                            <div class="flex gap-2 md:gap-3 w-full md:w-auto">
                                 <button id="btn-import"
-                                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-sm shadow-sm hover:shadow-md spring-transition">
-                                    <span class="material-symbols-outlined text-[18px]">upload</span> Import Aims
+                                    class="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-sm shadow-sm hover:shadow-md spring-transition">
+                                    <span class="material-symbols-outlined text-[18px]">upload</span> Import
                                 </button>
                                 <button id="btn-sample"
-                                    class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-lg spring-transition">
-                                    <span class="material-symbols-outlined text-[18px]">menu_book</span> Load Samples
+                                    class="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 md:px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-lg spring-transition">
+                                    <span class="material-symbols-outlined text-[18px]">menu_book</span> Samples
                                 </button>
                             </div>
                         </div>
@@ -470,12 +479,12 @@
                                     placeholder="// Define experiment objectives...&#10;// Use --- to separate multiple aims.&#10;&#10;Aim 1: Implement a binary search tree...&#10;---&#10;Aim 2: Develop a REST API using Express..."></textarea>
                             </div>
                         </div>
-                        <div class="flex items-center justify-between pt-4">
+                        <div class="flex flex-col-reverse md:flex-row items-center justify-between pt-4 gap-4">
                             <button id="btn-p2-back"
-                                class="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-white spring-transition"><span
+                                class="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-white spring-transition"><span
                                     class="material-symbols-outlined">arrow_back</span> Configure</button>
                             <button id="btn-p2-next"
-                                class="flex items-center gap-3 px-10 py-4 rounded-xl bg-primary text-white font-bold shadow-2xl hyper-gradient spring-transition hover:scale-105">Start
+                                class="w-full md:w-auto flex items-center justify-center gap-3 px-10 py-4 rounded-xl bg-primary text-white font-bold shadow-2xl hyper-gradient spring-transition hover:scale-105">Start
                                 Generation <span class="material-symbols-outlined">bolt</span></button>
                         </div>
                     </div>
@@ -484,15 +493,17 @@
                     <div id="phase-3" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                         <div
                             class="glass rounded-2xl p-8 mb-8 shadow-xl border border-white/50 relative overflow-hidden bg-white">
-                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                            <div
+                                class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 text-center md:text-left">
                                 <div>
-                                    <h1 class="text-3xl font-heading font-extrabold text-slate-900 mb-2">AI
+                                    <h1 class="text-2xl md:text-3xl font-heading font-extrabold text-slate-900 mb-2">AI
                                         Generation</h1>
-                                    <p class="text-slate-500 font-medium">Creating experiment content with high-accuracy
+                                    <p class="text-slate-500 font-medium text-sm md:text-base">Creating experiment
+                                        content with high-accuracy
                                         AI models.</p>
                                 </div>
                                 <div
-                                    class="size-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin">
+                                    class="size-10 md:size-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mx-auto md:mx-0">
                                 </div>
                             </div>
                             <div class="flex flex-col gap-3">
@@ -513,27 +524,30 @@
                         <div id="experiment-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <!-- Dynamic Content -->
                         </div>
-                        <div class="flex items-center justify-between mt-10">
+                        <div class="flex flex-col-reverse md:flex-row items-center justify-between mt-10 gap-4">
                             <button id="btn-p3-back"
-                                class="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-white spring-transition"><span
+                                class="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold hover:bg-white spring-transition"><span
                                     class="material-symbols-outlined">arrow_back</span> Modify Aims</button>
                             <button id="btn-p3-next"
-                                class="hidden flex items-center gap-3 px-10 py-4 rounded-xl bg-primary text-white font-bold shadow-2xl hyper-gradient spring-transition hover:scale-105">Review
+                                class="w-full md:w-auto hidden flex items-center justify-center gap-3 px-10 py-4 rounded-xl bg-primary text-white font-bold shadow-2xl hyper-gradient spring-transition hover:scale-105">Review
                                 Result <span class="material-symbols-outlined">arrow_forward</span></button>
                         </div>
                     </div>
 
                     <!-- PHASE 4: EXPORT -->
                     <div id="phase-4" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        <div class="flex items-center justify-between mb-4">
+                        <div
+                            class="flex flex-col md:flex-row items-center md:items-end justify-between mb-4 gap-4 text-center md:text-left">
                             <div class="flex flex-col">
-                                <span class="text-xs font-bold text-primary tracking-widest uppercase italic">Final
+                                <span
+                                    class="text-[10px] md:text-xs font-bold text-primary tracking-widest uppercase italic">Final
                                     Step</span>
-                                <h1 class="text-3xl font-extrabold text-slate-900">Final Document</h1>
+                                <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Final Document</h1>
                             </div>
-                            <div class="text-right">
-                                <span class="text-2xl font-black text-emerald-500">READY</span>
-                                <p class="text-[10px] font-bold text-slate-500 uppercase">Verification Passed</p>
+                            <div class="text-center md:text-right">
+                                <span class="text-xl md:text-2xl font-black text-emerald-500">READY</span>
+                                <p class="text-[8px] md:text-[10px] font-bold text-slate-500 uppercase">Verification
+                                    Passed</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -616,239 +630,33 @@
         class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 w-full max-w-sm"></div>
 
     <script src="script.js"></script>
-</body>
-
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PractiGen — Auto Practical File Generator</title>
-    <meta name="description"
-        content="Generate beautifully formatted practical lab documents with AI-powered code, concepts, and terminal output screenshots.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-
-    <!-- Vercel Web Analytics -->
     <script>
-        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+        // Mobile Sidebar Toggle
+        const sidebar = document.getElementById('app-sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const toggleBtn = document.getElementById('btn-toggle-sidebar');
+
+        function openSidebar() {
+            sidebar.classList.remove('-translate-x-full');
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+        }
+
+        function closeSidebar() {
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        toggleBtn?.addEventListener('click', openSidebar);
+        overlay?.addEventListener('click', closeSidebar);
+
+        // Auto-close on nav clicks for mobile
+        document.getElementById('nav-dashboard')?.addEventListener('click', () => {
+            if (window.innerWidth < 768) closeSidebar();
+        });
+        document.getElementById('nav-workspace')?.addEventListener('click', () => {
+            if (window.innerWidth < 768) closeSidebar();
+        });
     </script>
-    <script defer src="/_vercel/insights/script.js"></script>
-</head>
-
-<body>
-    <!-- Animated background -->
-    <div class="bg-grid"></div>
-    <div class="bg-glow bg-glow-1"></div>
-    <div class="bg-glow bg-glow-2"></div>
-
-    <!-- Header -->
-    <header id="app-header">
-        <div class="header-content">
-            <div class="logo">
-                <span class="logo-icon">⚡</span>
-                <h1>PractiGen</h1>
-            </div>
-            <p class="tagline">AI-Powered Practical File Generator</p>
-        </div>
-    </header>
-
-    <!-- Main Container -->
-    <main id="app-main">
-        <!-- Step Indicators -->
-        <div class="steps-bar" id="steps-bar">
-            <div class="step active" data-step="1">
-                <span class="step-num">1</span>
-                <span class="step-label">Configure</span>
-            </div>
-            <div class="step-connector"></div>
-            <div class="step" data-step="2">
-                <span class="step-num">2</span>
-                <span class="step-label">Write Aims</span>
-            </div>
-            <div class="step-connector"></div>
-            <div class="step" data-step="3">
-                <span class="step-num">3</span>
-                <span class="step-label">Generate</span>
-            </div>
-            <div class="step-connector"></div>
-            <div class="step" data-step="4">
-                <span class="step-num">4</span>
-                <span class="step-label">Download</span>
-            </div>
-        </div>
-
-        <!-- ====== STEP 1: Settings ====== -->
-        <section class="card glass-card" id="section-settings">
-            <div class="card-header">
-                <h2>⚙️ Configuration</h2>
-                <button class="btn-ghost" id="toggle-advanced" type="button">Advanced ▾</button>
-            </div>
-
-            <div class="form-grid">
-                <!-- API Key -->
-                <div class="form-group full-width">
-                    <label for="api-key">Groq API Key</label>
-                    <div class="input-with-icon">
-                        <input type="password" id="api-key" placeholder="gsk_xxxx..." autocomplete="off">
-                        <button class="btn-icon" id="toggle-key-visibility" type="button"
-                            title="Show/hide key">👁️</button>
-                    </div>
-                    <span class="hint">Leave empty to use Mock Mode</span>
-                </div>
-
-                <!-- Model -->
-                <div class="form-group">
-                    <label for="model-select">AI Model</label>
-                    <select id="model-select">
-                        <option value="llama-3.3-70b-versatile" selected>LLaMA 3.3 70B</option>
-                        <option value="llama-3.1-8b-instant">LLaMA 3.1 8B (Fast)</option>
-                    </select>
-                </div>
-
-                <!-- Mock Mode -->
-                <div class="form-group">
-                    <label for="mock-toggle">Mock Mode</label>
-                    <div class="toggle-wrapper">
-                        <label class="toggle">
-                            <input type="checkbox" id="mock-toggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="toggle-label" id="mock-label">Off</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Advanced Settings -->
-            <div class="advanced-settings" id="advanced-settings">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="font-name">Document Font</label>
-                        <select id="font-name">
-                            <option value="Times New Roman" selected>Times New Roman</option>
-                            <option value="Arial">Arial</option>
-                            <option value="Calibri">Calibri</option>
-                            <option value="Georgia">Georgia</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="body-size">Body Font Size</label>
-                        <input type="number" id="body-size" value="12" min="8" max="20">
-                    </div>
-                    <div class="form-group">
-                        <label for="heading-size">Heading Font Size</label>
-                        <input type="number" id="heading-size" value="14" min="10" max="24">
-                    </div>
-                    <div class="form-group">
-                        <label for="code-size">Code Font Size</label>
-                        <input type="number" id="code-size" value="10" min="6" max="16">
-                    </div>
-                    <div class="form-group">
-                        <label for="image-width">Image Width (inches)</label>
-                        <input type="number" id="image-width" value="5.0" min="2" max="7" step="0.5">
-                    </div>
-                    <div class="form-group">
-                        <label for="output-filename">Output Filename</label>
-                        <input type="text" id="output-filename" value="Generated_Practical_File.docx"
-                            placeholder="output.docx">
-                    </div>
-                </div>
-            </div>
-
-            <button class="btn btn-primary" id="btn-next-to-aims" type="button">
-                Continue to Aims →
-            </button>
-        </section>
-
-        <!-- ====== STEP 2: Aims Editor ====== -->
-        <section class="card glass-card hidden" id="section-aims">
-            <div class="card-header">
-                <h2>📝 Experiment Aims</h2>
-                <div class="header-actions">
-                    <label class="btn btn-outline btn-sm" for="file-upload">
-                        📂 Upload .txt
-                    </label>
-                    <input type="file" id="file-upload" accept=".txt" hidden>
-                    <button class="btn btn-outline btn-sm" id="btn-load-sample" type="button">Load Sample</button>
-                </div>
-            </div>
-
-            <p class="section-desc">Write or paste your experiment aims below. Separate each experiment with
-                <code>---</code> on its own line.</p>
-
-            <textarea id="aims-textarea" rows="14" placeholder="Write a program to add two numbers and display the sum.
----
-Write a program to find the greatest among three numbers.
----
-Write a program to generate Fibonacci series."></textarea>
-
-            <div class="aims-footer">
-                <button class="btn btn-ghost" id="btn-back-to-settings" type="button">← Back</button>
-                <button class="btn btn-primary" id="btn-parse" type="button">
-                    Parse & Preview →
-                </button>
-            </div>
-        </section>
-
-        <!-- ====== STEP 3: Preview & Generate ====== -->
-        <section class="card glass-card hidden" id="section-generate">
-            <div class="card-header">
-                <h2>🔬 Experiments Preview</h2>
-                <span class="badge" id="experiment-count">0 experiments</span>
-            </div>
-
-            <div id="experiments-list" class="experiments-list"></div>
-
-            <!-- Progress -->
-            <div class="progress-container hidden" id="progress-container">
-                <div class="progress-header">
-                    <span id="progress-text">Generating...</span>
-                    <span id="progress-percent">0%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
-                </div>
-            </div>
-
-            <div class="aims-footer">
-                <button class="btn btn-ghost" id="btn-back-to-aims" type="button">← Back</button>
-                <button class="btn btn-primary btn-generate" id="btn-generate" type="button">
-                    ⚡ Generate All
-                </button>
-            </div>
-        </section>
-
-        <!-- ====== STEP 4: Results & Download ====== -->
-        <section class="card glass-card hidden" id="section-download">
-            <div class="card-header">
-                <h2>✅ Generation Complete</h2>
-            </div>
-
-            <div id="results-list" class="results-list"></div>
-
-            <div class="aims-footer">
-                <button class="btn btn-ghost" id="btn-back-to-generate" type="button">← Back</button>
-                <button class="btn btn-primary btn-download" id="btn-download" type="button">
-                    📥 Download .docx
-                </button>
-            </div>
-        </section>
-    </main>
-
-    <!-- Toast Container -->
-    <div id="toast-container" class="toast-container"></div>
-
-    <!-- Footer -->
-    <footer id="app-footer">
-        <p>Built with ⚡ by PractiGen &mdash; Powered by Groq AI</p>
-    </footer>
-
-    <script src="script.js"></script>
 </body>
-
-</html>

@@ -214,39 +214,37 @@ def add_caption_para(doc, text, experiment_no, font_name='Times New Roman', size
 
 
 def create_terminal_image(output_text, img_width=600):
+    # Image settings
+    width = img_width
     font_size = 14
     padding = 20
-    windir = os.environ.get('WINDIR', 'C:\\Windows')
-    font_paths = [
-        os.path.join(windir, 'Fonts', 'consola.ttf'),
-        os.path.join(windir, 'Fonts', 'cour.ttf'),
-        os.path.join(windir, 'Fonts', 'arial.ttf'),
-        'consola.ttf', 
-        'cour.ttf'
-    ]
     
-    font = None
-    for path in font_paths:
+    # Check for font
+    try:
+        font = ImageFont.truetype("consola.ttf", font_size) # Windows console font
+    except IOError:
         try:
-            # Pillow's truetype can often find the font by name, but absolute path is safer
-            font = ImageFont.truetype(path, font_size)
-            break
-        except:
-            continue
-            
-    if font is None:
-        font = ImageFont.load_default()
+            font = ImageFont.truetype("cour.ttf", font_size) # Courier
+        except IOError:
+            font = ImageFont.load_default()
 
-    # Height Calculation
+    # Calculate height
     lines = str(output_text).split('\n')
     line_height = font_size + 4 
     height = (len(lines) * line_height) + (2 * padding)
-    img = Image.new('RGB', (img_width, height), color=(30, 30, 30))
+    
+    # Create Image
+    img = Image.new('RGB', (width, height), color=(30, 30, 30)) # Dark gray background
     d = ImageDraw.Draw(img)
+    
+    # Draw text
     y = padding
     for line in lines:
         try:
-            d.text((padding, y), line.replace('\r', ''), font=font, fill=(210, 210, 210))
+            text_line = line.replace('\r', '')
+            # Use pure white for contrast, and draw text twice with a 1px offset for a bold effect
+            d.text((padding, y), text_line, font=font, fill=(255, 255, 255))
+            d.text((padding + 1, y), text_line, font=font, fill=(255, 255, 255))
         except:
             pass
         y += line_height
