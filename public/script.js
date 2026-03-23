@@ -31,6 +31,8 @@ const btnDownload = $('#btn-download-all');
 const importInput = $('#aims-import-input');
 
 const apiKeyInput = $('#api-key');
+const terminalUserInput = $('#terminal-user');
+const terminalHostInput = $('#terminal-host');
 const aimsTextarea = $('#aims-textarea');
 const modelInputs = () => Array.from($$('input[name="model"]')).find(i => i.checked).value;
 
@@ -305,6 +307,8 @@ async function startGeneration() {
     generatedExperiments = [];
     const apiKey = apiKeyInput.value.trim();
     const model = modelInputs();
+    const terminalUser = terminalUserInput.value.trim() || 'student';
+    const terminalHost = terminalHostInput.value.trim() || 'kali';
 
     terminalLog(`➜ Target Model: ${model.toUpperCase()}`);
 
@@ -325,7 +329,7 @@ async function startGeneration() {
             const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ aim, api_key: apiKey, model })
+                body: JSON.stringify({ aim, api_key: apiKey, model, terminal_user: terminalUser, terminal_host: terminalHost })
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
@@ -427,11 +431,13 @@ window.promptRefine = async (index) => {
     try {
         const apiKey = apiKeyInput.value.trim();
         const model = modelInputs();
+        const terminalUser = terminalUserInput.value.trim() || 'student';
+        const terminalHost = terminalHostInput.value.trim() || 'kali';
 
         const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ aim: refinedAim, api_key: apiKey, model })
+            body: JSON.stringify({ aim: refinedAim, api_key: apiKey, model, terminal_user: terminalUser, terminal_host: terminalHost })
         });
 
         const data = await res.json();

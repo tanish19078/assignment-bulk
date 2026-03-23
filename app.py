@@ -53,6 +53,14 @@ def api_generate():
         aim = data.get('aim', '')
         api_key = data.get('api_key', '')
         model = data.get('model', 'llama-3.3-70b-versatile')
+        
+        terminal_user = data.get('terminal_user', 'student')
+        if not terminal_user.strip():
+            terminal_user = 'student'
+            
+        terminal_host = data.get('terminal_host', 'kali')
+        if not terminal_host.strip():
+            terminal_host = 'kali'
 
         if "sarvam" in model.lower():
             if not api_key:
@@ -60,23 +68,43 @@ def api_generate():
             if not api_key:
                 raise ValueError("SARVAM_API_KEY not found.")
             client = SarvamAI(api_subscription_key=api_key)
-            prompt = f"""You are a professional programming lab assistant with expertise in Indian languages. For this experiment aim:
+            prompt = f"""You are a professional Linux/OS lab assistant for a university Operating Systems course running on Ubuntu/Kali Linux, with expertise in Indian languages. For this experiment aim:
 
 "{aim}"
 
-Identify the most appropriate programming language for this aim (e.g., C, JavaScript, Python, etc.) and provide the following:
+IMPORTANT GUIDELINES:
+- If the aim involves demonstrating Linux commands, write the commands EXACTLY as a student would type them in the terminal. NO echo statements, NO bash script wrappers.
+- If the aim involves system calls (fork, exec, wait, open, read, write, etc.) or algorithms (FCFS, SJF, Banker's), write a complete C program for GCC on Linux.
+- If the aim involves both commands AND a C program (e.g., GCC compilation + Makefile), show the C source code first, then the terminal commands to compile and run.
+- If the aim involves memory management, show Linux commands (free, vmstat) directly, then a C program for system calls (malloc, sbrk).
+- NEVER use echo to narrate steps. Just write the actual commands.
+- Keep comments MINIMAL — only add a brief comment where the purpose is genuinely unclear. Do NOT comment every single line. For C programs, do not add obvious comments like "// include header" or "// main function". Only comment tricky logic.
+- Always target Linux (Ubuntu/Kali).
+- If the aim is written in a general way (not OS-specific), still generate Linux-appropriate content.
 
 Respond EXACTLY in this format (use these exact tags):
 
 [CONCEPT]
-Write 3-4 lines explaining the programming concepts used. Academic style. 
+Write 3-4 lines explaining the OS/Linux concepts used. Academic style. 
 CRITICAL: If the aim is written in an Indian language (like Hindi, Telugu, Tamil, Marathi, etc.), write this CONCEPT section in that same Indian language. Otherwise, use English.
 
 [CODE]
-Write the complete working source code. Plain code only, no markdown fences. Code should use standard English keywords (typical for programming).
+Write the code or commands. Plain text only, no markdown fences.
+For C programs: put the compilation command at the top as a comment.
+Keep comments minimal — only where genuinely needed.
 
 [OUTPUT]
-Show the realistic expected terminal or console output when this program runs.
+Show REALISTIC terminal output exactly as it would appear on a real Ubuntu/Kali Linux terminal.
+USE THIS EXACT USERNAME AND HOSTNAME IN ALL SHELL PROMPTS: {terminal_user}@{terminal_host}:~$
+For root commands use: root@{terminal_host}:~#
+Rules:
+- Show real paths, real file sizes, real timestamps, real kernel versions
+- For commands like ls -la, show proper permissions (drwxr-xr-x), owner as {terminal_user}, real sizes, dates
+- For gcc --version, show a real GCC version string (e.g., gcc (Debian 12.2.0-14) 12.2.0)
+- For uname -a, show a real kernel string matching the chosen OS {terminal_host}
+- For process programs, show realistic PIDs
+- Make it look EXACTLY like a screenshot from a real Linux terminal session running on {terminal_host}
+- Do NOT show generic placeholder output. Every line should be believable.
 
 [CAPTION]
 Write a very short (3-5 words) descriptive caption for the terminal output screenshot.
@@ -94,22 +122,41 @@ If the aim is in an Indian language, write this caption in that same language.
             from groq import Groq
             client = Groq(api_key=api_key)
 
-            prompt = f"""You are a professional programming lab assistant. For this experiment aim:
+            prompt = f"""You are a professional Linux/OS lab assistant for a university Operating Systems course running on Ubuntu/Kali Linux. For this experiment aim:
 
 "{aim}"
 
-Identify the most appropriate programming language for this aim (e.g., C, JavaScript, Python, etc.) and provide the following:
+IMPORTANT GUIDELINES:
+- If the aim involves demonstrating Linux commands, write the commands EXACTLY as a student would type them in the terminal. NO echo statements, NO bash script wrappers.
+- If the aim involves system calls (fork, exec, wait, open, read, write, etc.) or algorithms (FCFS, SJF, Banker's), write a complete C program for GCC on Linux.
+- If the aim involves both commands AND a C program (e.g., GCC compilation + Makefile), show the C source code first, then the terminal commands to compile and run.
+- If the aim involves memory management, show Linux commands (free, vmstat) directly, then a C program for system calls (malloc, sbrk).
+- NEVER use echo to narrate steps. Just write the actual commands.
+- Keep comments MINIMAL — only add a brief comment where the purpose is genuinely unclear. Do NOT comment every single line. For C programs, do not add obvious comments like "// include header" or "// main function". Only comment tricky logic.
+- Always target Linux (Ubuntu/Kali).
 
 Respond EXACTLY in this format (use these exact tags):
 
 [CONCEPT]
-Write 3-4 lines explaining the programming concepts used. Academic style.
+Write 3-4 lines explaining the OS/Linux concepts used. Academic style.
 
 [CODE]
-Write the complete working source code. Plain code only, no markdown fences.
+Write the code or commands. Plain text only, no markdown fences.
+For C programs: put the compilation command at the top as a comment.
+Keep comments minimal — only where genuinely needed.
 
 [OUTPUT]
-Show the realistic expected terminal or console output when this program runs.
+Show REALISTIC terminal output exactly as it would appear on a real Ubuntu/Kali Linux terminal.
+USE THIS EXACT USERNAME AND HOSTNAME IN ALL SHELL PROMPTS: {terminal_user}@{terminal_host}:~$
+For root commands use: root@{terminal_host}:~#
+Rules:
+- Show real paths, real file sizes, real timestamps, real kernel versions
+- For commands like ls -la, show proper permissions (drwxr-xr-x), owner as {terminal_user}, real sizes, dates
+- For gcc --version, show a real GCC version string (e.g., gcc (Debian 12.2.0-14) 12.2.0)
+- For uname -a, show a real kernel string matching the chosen OS {terminal_host}
+- For process programs, show realistic PIDs
+- Make it look EXACTLY like a screenshot from a real Linux terminal session running on {terminal_host}
+- Do NOT show generic placeholder output. Every line should be believable.
 
 [CAPTION]
 Write a very short (3-5 words) descriptive caption for the terminal output screenshot.
@@ -121,9 +168,18 @@ Write a very short (3-5 words) descriptive caption for the terminal output scree
             text = chat_completion.choices[0].message.content
 
         def extract_section(tag, text):
-            pattern = rf"\[{tag}\](.*?)(\[|$)"
+            # Use lookahead to stop only at valid section tags or end of string.
+            # Stopping at any '[' breaks when code contains arrays (e.g., node[0]).
+            pattern = rf"\[{tag}\](.*?)(?=\[(?:CONCEPT|CODE|OUTPUT|CAPTION)\]|$)"
             match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-            return match.group(1).strip() if match else None
+            
+            if match:
+                return match.group(1).strip()
+            
+            # Fallback for when models omit brackets (e.g., "**CODE:**" or just "CODE:")
+            pattern_fallback = rf"(?:\*\*|##\s*)?{tag}(?:\*\*|:)?\s*\n(.*?)(?=\n(?:\*\*|##\s*)?(?:CONCEPT|CODE|OUTPUT|CAPTION)(?:\*\*|:)?\s*\n|\Z)"
+            match_fallback = re.search(pattern_fallback, text, re.DOTALL | re.IGNORECASE)
+            return match_fallback.group(1).strip() if match_fallback else None
 
         concept = extract_section("CONCEPT", text)
         code = extract_section("CODE", text)
@@ -131,14 +187,14 @@ Write a very short (3-5 words) descriptive caption for the terminal output scree
         caption = extract_section("CAPTION", text)
 
         # Fallback if tags are missing or malformed
+        if not concept and not code:
+            raise ValueError('Malformed API response — missing expected tags (Concept and Code)')
+            
         if not all([concept, code, output_part, caption]):
             if not concept: concept = "No concept description provided by API."
             if not code: code = "// No code provided for this experiment."
             if not output_part: output_part = "No output provided."
             if not caption: caption = "Experiment Output"
-            
-            if "[CONCEPT]" not in text.upper() and "[CODE]" not in text.upper():
-                raise ValueError('Malformed API response — missing expected tags')
 
         # Clean up markdown fences if present
         code = re.sub(r'```[a-zA-Z]*', '', code).replace('```', '').strip()
