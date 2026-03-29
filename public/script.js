@@ -35,7 +35,21 @@ const terminalUserInput = $('#terminal-user');
 const terminalHostInput = $('#terminal-host');
 const aimsTextarea = $('#aims-textarea');
 const modelInputs = () => Array.from($$('input[name="model"]')).find(i => i.checked).value;
+const genModeInputs = () => Array.from($$('input[name="gen-mode"]')).find(i => i.checked).value;
 
+// Toggle OS Credentials depending on mode
+Array.from($$('input[name="gen-mode"]')).forEach(input => {
+    input.addEventListener('change', (e) => {
+        const osGroup = $('#os-credentials-group');
+        if (e.target.value === 'os') {
+            osGroup.classList.remove('hidden', 'opacity-0');
+            osGroup.classList.add('grid', 'opacity-100');
+        } else {
+            osGroup.classList.remove('grid', 'opacity-100');
+            osGroup.classList.add('hidden', 'opacity-0');
+        }
+    });
+});
 const getSettings = () => ({
     fontName: $('#setting-font').value,
     bodySize: $('#setting-body-size').value,
@@ -247,7 +261,8 @@ function setupEventListeners() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     experiments: generatedExperiments,
-                    settings: settings
+                    settings: settings,
+                    mode: genModeInputs()
                 }),
             });
 
@@ -329,7 +344,7 @@ async function startGeneration() {
             const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ aim, api_key: apiKey, model, terminal_user: terminalUser, terminal_host: terminalHost })
+                body: JSON.stringify({ aim, api_key: apiKey, model, mode: genModeInputs(), terminal_user: terminalUser, terminal_host: terminalHost })
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
@@ -367,6 +382,30 @@ function renderFinalArtifacts() {
     generatedExperiments.forEach((exp, i) => {
         const item = document.createElement('div');
         item.className = "glass-panel rounded-2xl p-1 overflow-hidden transition-all hover:shadow-lg border border-slate-100 bg-white shadow-sm";
+
+        // Build steps HTML for preview
+        let stepsHtml = '';
+        if (exp.steps && exp.steps.length > 0) {
+            exp.steps.forEach((step) => {
+                stepsHtml += `
+                    <div class="mb-4 border-l-2 border-primary/20 pl-4">
+                        <p class="text-xs font-bold text-primary mb-1">Step ${step.num}: ${step.explanation || ''}</p>
+                        <div class="bg-slate-950 rounded-lg p-3 font-mono text-[11px] text-slate-300 overflow-x-auto border border-slate-800 mb-2">
+                            <pre><code>${step.command || ''}</code></pre>
+                        </div>
+                        ${step.output ? `
+                        <div class="bg-slate-900 rounded-lg p-3 font-mono text-[10px] text-emerald-400 overflow-x-auto border border-slate-800">
+                            <pre><code>${step.output}</code></pre>
+                        </div>` : ''}
+                    </div>`;
+            });
+        } else {
+            stepsHtml = `
+                <div class="bg-slate-950 rounded-xl p-6 font-mono text-[11px] text-slate-300 overflow-x-auto shadow-inner border border-slate-800">
+                    <pre><code>${exp.code || '// No procedure provided.'}</code></pre>
+                </div>`;
+        }
+
         item.innerHTML = `
             <div class="flex items-center justify-between p-4 group">
                 <button class="flex items-center gap-4 text-left flex-1" onclick="this.parentElement.nextElementSibling.classList.toggle('hidden')">
@@ -375,7 +414,7 @@ function renderFinalArtifacts() {
                     </div>
                     <div>
                         <p class="font-bold text-slate-900 leading-none">Experiment ${(i + 1).toString().padStart(2, '0')}</p>
-                        <p class="text-[10px] text-slate-400 mt-1 font-mono uppercase tracking-widest">${exp.code ? 'Ready for Export' : 'In Progress'}</p>
+                        <p class="text-[10px] text-slate-400 mt-1 font-mono uppercase tracking-widest">${exp.steps ? 'Ready for Export' : 'In Progress'}</p>
                     </div>
                 </button>
                 <div class="flex gap-2">
@@ -386,22 +425,13 @@ function renderFinalArtifacts() {
             </div>
             <div class="hidden px-6 pb-8 text-sm text-slate-600 leading-relaxed space-y-6 border-t border-slate-50 pt-6 bg-slate-50/30">
                 <div class="space-y-2">
-                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Experiment Concept</h4>
-                    <p class="text-slate-900 font-medium">${exp.concept}</p>
+                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Theory</h4>
+                    <p class="text-slate-900 font-medium whitespace-pre-line">${exp.concept}</p>
                 </div>
                 
                 <div class="space-y-2">
-                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Source Code</h4>
-                    <div class="bg-slate-950 rounded-xl p-6 font-mono text-[11px] text-slate-300 overflow-x-auto shadow-inner border border-slate-800">
-                        <pre><code>${exp.code || '// No code provided.'}</code></pre>
-                    </div>
-                </div>
-
-                <div class="space-y-2">
-                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Program Output</h4>
-                    <div class="bg-slate-900 rounded-xl p-5 font-mono text-[11px] text-emerald-400 overflow-x-auto shadow-inner border border-slate-800">
-                        <pre><code>${exp.output || '// No output recorded.'}</code></pre>
-                    </div>
+                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Procedure</h4>
+                    ${stepsHtml}
                 </div>
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-100 mt-4">

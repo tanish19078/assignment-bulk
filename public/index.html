@@ -176,12 +176,11 @@
                             class="glass-card p-8 rounded-2xl flex flex-col gap-6 border-l-4 border-l-indigo-400 hover:shadow-xl transition-shadow bg-white/80">
                             <div
                                 class="size-14 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center">
-                                <span class="material-symbols-outlined text-2xl">translate</span>
+                                <span class="material-symbols-outlined text-2xl">bolt</span>
                             </div>
                             <div>
-                                <h3 class="font-bold text-xl mb-2">Indian Context AI</h3>
-                                <p class="text-sm text-slate-500 leading-relaxed font-medium">Full support for Hindi,
-                                    Telugu, Tamil and more via Sarvam AI. Perfect for regional academic boards.</p>
+                                <h3 class="font-bold text-xl mb-2">Groq Powered</h3>
+                                <p class="text-sm text-slate-500 leading-relaxed font-medium">Blazing fast generation speeds using Llama 3.3 70B and 3.1 8B via Groq LPUs.</p>
                             </div>
                         </div>
                     </div>
@@ -238,6 +237,36 @@
                     <div id="phase-1" class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             <div class="lg:col-span-2 space-y-6">
+                                <!-- Generation Mode -->
+                                <div class="glass-panel p-6 rounded-2xl border-slate-200/50 shadow-sm overflow-hidden relative">
+                                    <div class="flex items-center gap-2 mb-6">
+                                        <span class="material-symbols-outlined text-primary">toggle_on</span>
+                                        <h3 class="text-lg font-bold font-heading">Generation Mode</h3>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div class="relative">
+                                            <input type="radio" name="gen-mode" id="mode-os" class="peer hidden" checked value="os">
+                                            <label for="mode-os" class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">OS Practical</span>
+                                                    <span class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Step-by-step Linux terminal output.</p>
+                                            </label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="gen-mode" id="mode-general" class="peer hidden" value="general">
+                                            <label for="mode-general" class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-sm font-bold">General Coding</span>
+                                                    <span class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
+                                                </div>
+                                                <p class="text-[11px] text-slate-500">Standard programming outputs.</p>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div
                                     class="glass-panel p-6 rounded-2xl border-slate-200/50 shadow-sm overflow-hidden relative">
                                     <div class="flex items-center gap-2 mb-6">
@@ -259,7 +288,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div id="os-credentials-group" class="grid grid-cols-1 md:grid-cols-2 gap-4 transition-all duration-300">
                                             <div>
                                                 <label
                                                     class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Terminal Username</label>
@@ -291,51 +320,9 @@
                                         <h3 class="text-lg font-bold font-heading">Intelligence Selection</h3>
                                     </div>
                                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <!-- Sarvam Models -->
-                                        <div class="relative">
-                                            <input type="radio" name="model" id="m-sarvam-1" class="peer hidden" checked
-                                                value="sarvam-30b">
-                                            <label for="m-sarvam-1"
-                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
-                                                <div class="flex justify-between items-start mb-1">
-                                                    <span class="text-sm font-bold">Sarvam 30B</span>
-                                                    <span
-                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
-                                                </div>
-                                                <p class="text-[11px] text-slate-500">Advanced reasoning & multilingual.
-                                                </p>
-                                            </label>
-                                        </div>
-                                        <div class="relative">
-                                            <input type="radio" name="model" id="m-sarvam-2" class="peer hidden"
-                                                value="sarvam-105b">
-                                            <label for="m-sarvam-2"
-                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
-                                                <div class="flex justify-between items-start mb-1">
-                                                    <span class="text-sm font-bold">Sarvam 105B</span>
-                                                    <span
-                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
-                                                </div>
-                                                <p class="text-[11px] text-slate-500">Highest performance model.</p>
-                                            </label>
-                                        </div>
-                                        <div class="relative">
-                                            <input type="radio" name="model" id="m-sarvam-3" class="peer hidden"
-                                                value="sarvam-m">
-                                            <label for="m-sarvam-3"
-                                                class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
-                                                <div class="flex justify-between items-start mb-1">
-                                                    <span class="text-sm font-bold">Sarvam M</span>
-                                                    <span
-                                                        class="material-symbols-outlined text-primary scale-0 peer-checked:scale-100 transition-transform">check_circle</span>
-                                                </div>
-                                                <p class="text-[11px] text-slate-500">Efficient reasoning (Open
-                                                    Weights).</p>
-                                            </label>
-                                        </div>
                                         <!-- Llama Models -->
                                         <div class="relative">
-                                            <input type="radio" name="model" id="m-llama-1" class="peer hidden"
+                                            <input type="radio" name="model" id="m-llama-1" class="peer hidden" checked
                                                 value="llama-3.3-70b-versatile">
                                             <label for="m-llama-1"
                                                 class="block p-4 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50 transition-all peer-checked:border-primary peer-checked:bg-primary/5 h-full">
