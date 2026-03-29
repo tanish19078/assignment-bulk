@@ -473,7 +473,7 @@ def api_download():
                                 pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                 run = pic_para.add_run()
                                 run.add_picture(img_buf, width=Inches(image_width_inches))
-                                add_caption_para(doc, caption, i, step_num, font_name, caption_size)
+                                add_caption_para(doc, explanation, i, step_num, font_name, caption_size)
                             except Exception as img_err:
                                 print(f"DEBUG: Step {step_num} image error: {img_err}")
                                 add_code_para(doc, output, font_name, code_size)
