@@ -836,6 +836,186 @@ def api_generate():
         return jsonify({'error': error_msg}), status_code
 
 
+# ==================== API: Refine Experiment (Bug 3) ====================
+def build_refine_messages(mode, aim, change_request, existing_concept, existing_code,
+                          existing_output, target_language='', terminal_user='student',
+                          terminal_host='kali'):
+    """Build a refine-specific [system, user] message pair that includes the full existing
+    experiment as context so the LLM edits it instead of regenerating from scratch."""
+    if mode == 'os':
+        fmt = ("[CONCEPT] ... [PROCEDURE] (numbered Step N: with $ commands and Output: blocks) "
+               "[CAPTION]")
+        lang_line = ''
+    elif mode in ('general', 'language') and target_language:
+        fmt = "[CONCEPT] [CODE] [OUTPUT] [CAPTION]"
+        lang_line = f"\nAll code MUST remain in {target_language}."
+    else:
+        fmt = "[CONCEPT] [CODE] [OUTPUT] [CAPTION]"
+        lang_line = ''
+
+    system = (
+        "You are a precise lab-file editor. You make the SMALLEST change that satisfies the "
+        "user's request and keep everything else identical. You always respond using the exact "
+        "section tags requested."
+    )
+    user = f"""Here is an existing experiment that was already generated:
+
+[AIM] {aim}
+[CONCEPT] {existing_concept}
+[CODE] {existing_code}
+[OUTPUT] {existing_output}
+
+The user wants this SPECIFIC modification: "{change_request}"
+
+RULES:
+- Modify ONLY what the user requested.
+- Keep everything else as close to the original as possible.{lang_line}
+- For OS terminal prompts use {terminal_user}@{terminal_host}:~$.
+- Return the FULL updated experiment in this exact tag format: {fmt}
+"""
+    return [
+        {'role': 'system', 'content': system},
+        {'role': 'user', 'content': user},
+    ]
+
+
+@app.route('/api/refine', methods=['POST'])
+def api_refine():
+    try:
+        data = request.get_json()
+        aim = data.get('aim', '')
+        change_request = data.get('change_request', '')
+        if not change_request.strip():
+            raise ValueError("A change request is required to refine an experiment.")
+
+        existing_code = data.get('existing_code', '')
+        existing_concept = data.get('existing_concept', '')
+        existing_output = data.get('existing_output', '')
+
+        api_key = data.get('api_key', '')
+        provider = data.get('provider', 'groq')
+        model = data.get('model', 'llama-3.3-70b-versatile')
+        mode = data.get('mode', 'general')
+        target_language = data.get('code_language', '').strip()
+
+        terminal_user = (data.get('terminal_user') or 'student').strip() or 'student'
+        terminal_host = (data.get('terminal_host') or 'kali').strip() or 'kali'
+
+        selected_provider_config = LLM_PROVIDERS.get(provider)
+        if not selected_provider_config:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+        selected_api_keys = get_provider_keys(selected_provider_config, api_key)
+
+        messages = build_refine_messages(
+            mode, aim, change_request, existing_concept, existing_code, existing_output,
+            target_language, terminal_user, terminal_host,
+        )
+
+        # Lower temperature keeps the edit minimal and targeted.
+        text = run_completion(
+            messages, provider, model, selected_provider_config, selected_api_keys,
+            temperature=0.3, top_p=0.9,
+        )
+
+        result = parse_generation_text(text, mode, target_language)
+        validate_generation_result(mode, result.get('code'), result.get('concept'))
+        result['aim'] = aim  # preserve the original aim, not the change request
+        return jsonify(result)
+    except Exception as e:
+        error_msg = str(e)
+        status_code = 500
+        if "401" in error_msg or "Authentication" in error_msg:
+            status_code = 401
+        elif "429" in error_msg or "Rate limit" in error_msg:
+            status_code = 429
+        return jsonify({'error': error_msg}), status_code
+
+
+# ==================== API: Auto-Detect Mode + Language (Phase 3) ====================
+@app.route('/api/detect', methods=['POST'])
+def api_detect():
+    try:
+        data = request.get_json() or {}
+        aims = data.get('aims')
+        if aims is None:
+            text = data.get('text', '')
+            separator = data.get('separator', '---')
+            pattern = r'\n\s*' + re.escape(separator) + r'+\s*\n'
+            aims = [b.strip() for b in re.split(pattern, text) if b.strip()]
+
+        detections = [
+            {'aim': aim, **detect_mode_and_language(aim)}
+            for aim in aims
+        ]
+        return jsonify({'detections': detections})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== API: Extract Aims from Syllabus PDF (Phase 3) ====================
+@app.route('/api/extract-aims', methods=['POST'])
+def api_extract_aims():
+    try:
+        upload = request.files.get('file')
+        if upload is None or not upload.filename:
+            return jsonify({'error': 'No PDF file uploaded.'}), 400
+        if not upload.filename.lower().endswith('.pdf'):
+            return jsonify({'error': 'Only .pdf files are supported.'}), 400
+
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            return jsonify({'error': 'PDF support is unavailable on this server (pypdf not installed).'}), 400
+
+        try:
+            reader = PdfReader(upload.stream)
+            raw_text = '\n'.join((page.extract_text() or '') for page in reader.pages)
+        except Exception as pdf_err:
+            return jsonify({'error': f'Could not read PDF: {pdf_err}'}), 400
+
+        raw_text = raw_text.strip()
+        if not raw_text:
+            return jsonify({'error': 'No extractable text found in the PDF (it may be scanned images).'}), 400
+
+        # Truncate to keep the LLM prompt within sane limits.
+        raw_text = raw_text[:12000]
+
+        api_key = request.form.get('api_key', '')
+        provider = request.form.get('provider', 'groq')
+        model = request.form.get('model', 'llama-3.3-70b-versatile')
+
+        selected_provider_config = LLM_PROVIDERS.get(provider)
+        if not selected_provider_config:
+            return jsonify({'error': f'Unsupported LLM provider: {provider}'}), 400
+        selected_api_keys = get_provider_keys(selected_provider_config, api_key)
+
+        messages = [
+            {'role': 'system', 'content': (
+                "You extract a clean list of practical/experiment aims from messy university "
+                "syllabus text. Output ONLY the aims, one per line, each starting with no numbering "
+                "or bullet, separated by a line containing exactly ---. No commentary."
+            )},
+            {'role': 'user', 'content': (
+                "Extract every distinct experiment/practical aim from this syllabus text. "
+                "Return them separated by lines containing only ---.\n\n" + raw_text
+            )},
+        ]
+
+        text = run_completion(
+            messages, provider, model, selected_provider_config, selected_api_keys,
+            temperature=0.2, top_p=0.9,
+        )
+
+        aims = [a.strip(' \t\r\n-•.').strip() for a in re.split(r'\n\s*-{3,}\s*\n', text)]
+        aims = [a for a in aims if a and len(a) > 4]
+        if not aims:
+            aims = [line.strip(' \t\r\n-•.') for line in text.splitlines() if len(line.strip()) > 8]
+
+        return jsonify({'aims': aims, 'text': '\n---\n'.join(aims)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ==================== API: Download .docx ====================
 def set_font(paragraph, font_name='Times New Roman', size=12, bold=False):
     for run in paragraph.runs:
