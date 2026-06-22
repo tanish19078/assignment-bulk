@@ -807,12 +807,13 @@ def create_terminal_image(output_text, img_width=600):
             text_line = line
             # Normal font weight, matching Picture1.png color
             d.text((padding, y), text_line, font=font, fill=(201, 219, 213))
-        except:
-            pass
+        except Exception as draw_err:
+            print(f"DEBUG: terminal image line draw failed: {draw_err}")
         y += line_height
-        
+
     buf = io.BytesIO()
     img.save(buf, format='PNG')
+    img.close()  # Free the PIL image immediately (Bug 4 — memory)
     buf.seek(0)
     return buf
 
