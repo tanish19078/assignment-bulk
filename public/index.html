@@ -76,7 +76,19 @@
     
     <main id="content">
 
-      
+
+      <div id="restoreBanner" style="display:none;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;padding:0.85rem 1.1rem;border:1px solid var(--accent-border);background:var(--accent-dim);border-radius:10px;">
+        <span style="font-size:0.85rem;color:var(--text);">
+          <i class="fas fa-clock-rotate-left" style="margin-right:0.4rem;color:var(--accent);"></i>
+          <span id="restoreText">Previous session found. Restore?</span>
+        </span>
+        <span style="display:flex;gap:0.5rem;">
+          <button class="btn btn-primary" style="padding:0.35rem 0.9rem;font-size:0.8rem;" onclick="restoreSession()">Restore</button>
+          <button class="btn btn-secondary" style="padding:0.35rem 0.9rem;font-size:0.8rem;" onclick="clearSession()">Clear</button>
+        </span>
+      </div>
+
+
       <section id="view-dashboard" class="view active">
         <div style="max-width:780px;margin:0 auto;text-align:center">
           <p style="color:var(--muted);font-size:.88rem;margin-bottom:.4rem" id="greeting">Good evening, Researcher.</p>
@@ -131,6 +143,11 @@
                   <i class="fas fa-code"></i>
                   <h4>General Coding</h4>
                   <p>Standard programming with code + output</p>
+                </div>
+                <div class="mode-card" data-mode="auto" onclick="selectMode('auto')">
+                  <i class="fas fa-wand-magic-sparkles"></i>
+                  <h4>Auto-Detect</h4>
+                  <p>Classify each aim's mode &amp; language automatically</p>
                 </div>
               </div>
               <div id="mode-options" style="margin-top:1rem;display:none;">
@@ -250,10 +267,14 @@ Write a C program to simulate Banker's Algorithm for deadlock avoidance"></texta
         </div>
 
         
-        <div style="margin-top:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
-          <button class="btn btn-ghost" onclick="showToast('info','PDF extraction requires backend connection.')">
+        <div style="margin-top:1rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="importSyllabusPdf()">
             <i class="fas fa-file-pdf" style="color:var(--error);"></i> Syllabus PDF Upload
           </button>
+          <button class="btn btn-ghost" onclick="autoDetectAims()">
+            <i class="fas fa-wand-magic-sparkles" style="color:var(--accent);"></i> Auto-Detect Mode
+          </button>
+          <input type="file" id="pdfInput" accept=".pdf" style="display:none;" onchange="handlePdfImport(event)">
           <span class="badge badge-muted" id="aimCountBadge">0 experiments detected</span>
         </div>
 
@@ -371,10 +392,10 @@ Write a C program to simulate Banker's Algorithm for deadlock avoidance"></texta
               <div id="classroomOptions" style="display:none;">
                 <label class="label">Number of Students</label>
                 <input class="input" type="number" id="studentCount" value="30" min="2" max="200" style="margin-bottom:0.75rem;">
-                <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="showToast('info','Classroom mode requires backend connection.')">
+                <button class="btn btn-secondary" id="classroomBtn" style="width:100%;justify-content:center;" onclick="downloadClassroomZip()">
                   <i class="fas fa-file-zipper"></i> Download All Variations (ZIP)
                 </button>
-                <p class="helper" style="margin-top:0.5rem;">Each file will have unique variable names, examples, and data.</p>
+                <p class="helper" style="margin-top:0.5rem;">Each file will have unique variable names, examples, and data. Capped at 12 students per batch.</p>
               </div>
             </div>
           </div>
