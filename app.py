@@ -164,7 +164,7 @@ def parse_anthropic_message_response(provider_config, body):
         raise ValueError(f"Malformed {provider_config['label']} response: {body[:500]}") from err
 
 
-def build_anthropic_payload(provider_config, model, messages):
+def build_anthropic_payload(provider_config, model, messages, temperature=0.7, top_p=0.9):
     system_parts = []
     anthropic_messages = []
 
@@ -188,6 +188,8 @@ def build_anthropic_payload(provider_config, model, messages):
         'model': model,
         'max_tokens': provider_config.get('max_tokens', 4096),
         'messages': anthropic_messages or [{'role': 'user', 'content': ''}],
+        'temperature': temperature,
+        'top_p': top_p,
     }
 
     if system_parts:
@@ -196,7 +198,7 @@ def build_anthropic_payload(provider_config, model, messages):
     return payload
 
 
-def create_chat_completion(provider_key, api_key, model, messages):
+def create_chat_completion(provider_key, api_key, model, messages, temperature=0.7, top_p=0.9):
     provider_config = LLM_PROVIDERS.get(provider_key)
     if not provider_config:
         raise ValueError(f"Unsupported LLM provider: {provider_key}")
@@ -208,12 +210,14 @@ def create_chat_completion(provider_key, api_key, model, messages):
     api_format = provider_config.get('api_format', 'openai')
     if api_format == 'anthropic':
         url = provider_config['base_url'].rstrip('/') + '/messages'
-        payload = build_anthropic_payload(provider_config, model, messages)
+        payload = build_anthropic_payload(provider_config, model, messages, temperature=temperature, top_p=top_p)
     else:
         url = provider_config['base_url'].rstrip('/') + '/chat/completions'
         payload = {
             'model': model,
             'messages': messages,
+            'temperature': temperature,
+            'top_p': top_p,
         }
 
     headers = {
@@ -242,6 +246,415 @@ def create_chat_completion(provider_key, api_key, model, messages):
         return parse_anthropic_message_response(provider_config, body)
 
     return parse_openai_chat_response(provider_config, body)
+
+
+# ==================== SHARED COMPLETION RUNNER ====================
+def build_provider_attempts(provider, model, provider_config, api_keys):
+    """Build the ordered list of (provider, model, keys) attempts including fallbacks."""
+    attempts = [{
+        'provider': provider,
+        'model': model,
+        'config': provider_config,
+        'keys': api_keys,
+    }]
+
+    if provider == 'cerebras':
+        groq_config = LLM_PROVIDERS['groq']
+        attempts.append({
+            'provider': 'groq',
+            'model': 'llama-3.3-70b-versatile',
+            'config': groq_config,
+            'keys': get_provider_keys(groq_config, ''),
+        })
+
+    if provider == 'freemodel_anthropic':
+        fallback_model = provider_config.get('fallback_model', 'claude-sonnet-4-6')
+        if model != fallback_model:
+            attempts.append({
+                'provider': provider,
+                'model': fallback_model,
+                'config': provider_config,
+                'keys': api_keys,
+            })
+
+    return attempts
+
+
+def run_completion(messages, provider, model, provider_config, api_keys, temperature=0.7, top_p=0.9):
+    """Run a chat completion across provider attempts with key rotation, backoff and fallback.
+
+    Returns the response text, or raises the last error. Replaces the fragile
+    `'text' in locals()` pattern with an explicit sentinel.
+    """
+    provider_attempts = build_provider_attempts(provider, model, provider_config, api_keys)
+
+    result_text = None
+    last_error = None
+    max_retries = 3
+
+    for attempt in range(max_retries + 1):
+        for provider_attempt in provider_attempts:
+            attempt_provider = provider_attempt['provider']
+            attempt_model = provider_attempt['model']
+            attempt_config = provider_attempt['config']
+            attempt_keys = provider_attempt['keys']
+
+            for key_index, selected_key in enumerate(attempt_keys or ['']):
+                try:
+                    result_text = create_chat_completion(
+                        attempt_provider,
+                        selected_key,
+                        model=attempt_model,
+                        messages=messages,
+                        temperature=temperature,
+                        top_p=top_p,
+                    )
+                    break
+                except Exception as api_err:
+                    last_error = api_err
+                    err_str = str(api_err)
+                    is_rate_limited = '429' in err_str or 'rate' in err_str.lower()
+                    is_bad_key = (
+                        '401' in err_str
+                        or 'invalid api key' in err_str.lower()
+                        or 'expired_api_key' in err_str.lower()
+                        or 'authentication' in err_str.lower()
+                    )
+                    is_invalid_model = (
+                        'invalid_request' in err_str.lower()
+                        and 'model' in err_str.lower()
+                    ) or '暂未开放' in err_str
+                    has_backup_key = key_index < len(attempt_keys) - 1
+
+                    if (is_rate_limited or is_bad_key) and has_backup_key:
+                        print(f"{attempt_config['label']} key {key_index + 1} failed. Trying backup key...")
+                        continue
+
+                    if is_invalid_model and provider_attempt is not provider_attempts[-1]:
+                        print(f"{attempt_config['label']} model {attempt_model} failed. Trying fallback model...")
+                        break
+
+                    if is_rate_limited and provider_attempt is not provider_attempts[-1]:
+                        print(f"{attempt_config['label']} is busy. Falling back to {provider_attempts[-1]['config']['label']}...")
+                        break
+
+                    if is_rate_limited and attempt < max_retries:
+                        wait_time = 15 * (2 ** attempt)  # 15s, 30s, 60s
+                        print(f"Rate limited. Waiting {wait_time}s before retry {attempt + 1}/{max_retries}...")
+                        time.sleep(wait_time)
+                        break
+
+                    raise
+
+            if result_text is not None:
+                break
+
+        if result_text is not None:
+            break
+
+    if result_text is None:
+        raise RuntimeError(
+            f"All provider attempts exhausted without a response. Last error: {last_error}"
+        )
+
+    return result_text
+
+
+# ==================== RESPONSE PARSING & VALIDATION ====================
+def extract_section(tag, text):
+    """Extract a [TAG] section from an LLM response. Returns None when the tag is absent."""
+    text = text or ''
+    pattern = rf"\[{tag}\](.*?)(?=\[(?:CONCEPT|CODE|PROCEDURE|OUTPUT|CAPTION)\]|$)"
+    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+
+    if match:
+        return match.group(1).strip()
+
+    pattern_fallback = rf"(?:\*\*|##\s*)?{tag}(?:\*\*|:)?\s*\n(.*?)(?=\n(?:\*\*|##\s*)?(?:CONCEPT|CODE|PROCEDURE|OUTPUT|CAPTION)(?:\*\*|:)?\s*\n|\Z)"
+    match_fallback = re.search(pattern_fallback, text, re.DOTALL | re.IGNORECASE)
+    return match_fallback.group(1).strip() if match_fallback else None
+
+
+LANGUAGE_MARKERS = {
+    'python': {'positive': ['def ', 'import ', 'print('], 'negative': ['#include', 'int main', 'System.out', 'console.log']},
+    'c': {'positive': ['#include', 'int main', 'printf'], 'negative': ['def ', 'public class', 'console.log']},
+    'cpp': {'positive': ['#include', 'std::', 'int main'], 'negative': ['def ', 'public class', 'console.log']},
+    'c++': {'positive': ['#include', 'std::', 'int main'], 'negative': ['def ', 'public class', 'console.log']},
+    'java': {'positive': ['public class', 'System.out', 'void main'], 'negative': ['#include', 'def ', 'print(']},
+    'javascript': {'positive': ['console.log', 'function ', 'const ', 'let '], 'negative': ['#include', 'System.out', 'def ', 'printf']},
+}
+
+
+def validate_code_language(code, target_language):
+    """Heuristic check that `code` appears to be written in `target_language`.
+
+    Unknown languages skip validation (return True). For known languages, the code
+    must contain at least one positive marker and no negative markers.
+    """
+    if not code:
+        return False
+
+    lang_key = (target_language or '').lower().strip()
+    markers = LANGUAGE_MARKERS.get(lang_key)
+    if not markers:
+        return True  # Unknown language — cannot validate, accept.
+
+    has_positive = any(m in code for m in markers['positive'])
+    has_negative = any(m in code for m in markers['negative'])
+    return has_positive and not has_negative
+
+
+def validate_generation_result(mode, code, concept):
+    """Raise ValueError when the parsed result is clearly empty/malformed.
+
+    A malformed LLM response must NOT be silently accepted as a success — it
+    should bubble up so the caller can retry instead of saving placeholder text.
+    """
+    if mode != 'os':
+        if not code or len(code.strip()) < 20:
+            raise ValueError("LLM returned empty or too-short code. Retry needed.")
+    if not concept or not concept.strip():
+        raise ValueError("LLM returned no concept/theory. Retry needed.")
+
+
+# ==================== AUTO-DETECT (Phase 3) ====================
+_OS_CUES = re.compile(
+    r'\b(ls|cat|grep|chmod|chown|mkdir|touch|awk|sed|pwd|ps|kill|df|du|'
+    r'shell script|bash|linux|unix|terminal|command[s]?|file permission|'
+    r'system call|fork|exec|directory|kernel)\b',
+    re.IGNORECASE,
+)
+
+_LANG_CUES = [
+    ('cpp', re.compile(r'\bc\+\+\b', re.IGNORECASE)),
+    ('python', re.compile(r'\bpython\b', re.IGNORECASE)),
+    ('java', re.compile(r'\bjava\b(?!script)', re.IGNORECASE)),
+    ('javascript', re.compile(r'\b(javascript|node\.?js|js)\b', re.IGNORECASE)),
+    ('c', re.compile(r'\bc\s+(program|language|code)\b', re.IGNORECASE)),
+]
+
+
+def detect_mode_and_language(aim):
+    """Heuristically infer {'mode', 'code_language'} from an aim string.
+
+    Cheap regex-only classification. mode is 'os' or 'general'; code_language is a
+    string or None when no clear language cue is present.
+    """
+    aim_text = aim or ''
+
+    detected_lang = None
+    for lang, pattern in _LANG_CUES:
+        if pattern.search(aim_text):
+            detected_lang = lang
+            break
+
+    is_shell = bool(re.search(r'\bshell\s+script\b', aim_text, re.IGNORECASE))
+    has_os_cue = bool(_OS_CUES.search(aim_text))
+
+    # A program in a specific high-level language => general coding mode.
+    if detected_lang in ('python', 'java', 'javascript', 'cpp') and not is_shell:
+        return {'mode': 'general', 'code_language': detected_lang}
+
+    if is_shell or (has_os_cue and detected_lang != 'c'):
+        return {'mode': 'os', 'code_language': None}
+
+    if detected_lang:
+        return {'mode': 'general', 'code_language': detected_lang}
+
+    return {'mode': 'general', 'code_language': None}
+
+
+# ==================== PROMPT / MESSAGE BUILDER ====================
+def build_messages(mode, aim, target_language='', terminal_user='student', terminal_host='kali', variation_seed=''):
+    """Construct a [system, user] message pair for generation.
+
+    Hard rules (output format, language lock) live in the system message for
+    maximum LLM compliance; the aim + variation seed live in the user message.
+    """
+    variation_note = ''
+    if variation_seed:
+        variation_note = (
+            "\n\nIMPORTANT: Use creative and unique variable names, examples, and data values. "
+            "Do not produce generic textbook examples. "
+            f"Variation reference: {variation_seed}"
+        )
+
+    if mode == 'os':
+        system = (
+            "You are a professional Linux systems instructor preparing a practical lab file for a "
+            "university Operating Systems course. You always respond using the exact section tags "
+            "requested, with realistic terminal output and no placeholders."
+        )
+        user = f"""Your instructor has assigned this aim:
+
+"{aim}"
+
+Work through the aim methodically, step by step, like an experienced professional would demonstrate in a real lab. Before each command or code block, write a clear explanation (1-2 lines) of what it does and why. Then write the command. Then show what the terminal actually displayed.
+
+If the aim asks you to explore a command with its options, use it normally first, then show a few useful options — just like you'd actually try them in a real lab session. Don't robotically list every flag. Use your judgement.
+
+If the aim asks for a C program (system calls, algorithms, etc.), write a clean, complete program. Compile and run it.
+
+If the aim has multiple parts or multiple commands, work through each one properly.
+
+Keep it natural. No filler. No padding. Just a real, useful practical.
+
+Respond in this exact format:
+
+[CONCEPT]
+4-5 lines explaining the core OS concepts behind this practical in academic language. Keep it concise and focused. If there is a specific term or technique that needs extra explanation (e.g., what a system call is, what a process control block does), add ONE short follow-up paragraph for it — but only if truly needed. Do not over-explain obvious things.
+
+[PROCEDURE]
+Plain text, no markdown fences. Write it as numbered steps. Each step MUST include its own output immediately after the command.
+
+Format each step EXACTLY like this:
+
+Step 1: <what you're doing and why>
+$ <command or code>
+Output:
+{terminal_user}@{terminal_host}:~$ <the command typed>
+<realistic terminal output for this specific command>
+
+Step 2: <what you're doing and why>
+$ <command or code>
+Output:
+{terminal_user}@{terminal_host}:~$ <the command typed>
+<realistic terminal output for this specific command>
+
+...and so on. Only what the aim needs.
+
+For C programs, write the full source code in one step (no $ prefix for the code itself), then compile and run as separate steps with $ prefix and their own outputs.
+
+CRITICAL — Terminal output rules:
+- The Output section for each step MUST start with the prompt and the command being typed on the FIRST line, then show the result below it. Do NOT add an extra prompt line at the end.
+- Use this prompt: {terminal_user}@{terminal_host}:~$
+- For root: root@{terminal_host}:~#
+- Real permissions, real file sizes, real dates (Feb-Mar 2026), real PIDs, real kernel (6.1.0-18-amd64)
+- No placeholders, no "...", no skipped output
+- Each step's output must be realistic and complete
+
+[CAPTION]
+3-5 word caption for the experiment.{variation_note}"""
+        return [
+            {'role': 'system', 'content': system},
+            {'role': 'user', 'content': user},
+        ]
+
+    if mode in ('general', 'language') and target_language:
+        system = (
+            f"You are a {target_language} programming expert. You MUST write ALL code exclusively in "
+            f"{target_language}. Never use any other programming language under any circumstances, "
+            f"regardless of what the aim text says. You always respond using the exact section tags requested."
+        )
+        user = f"""MANDATORY: Write ALL code in {target_language} ONLY.
+
+Experiment aim:
+
+"{aim}"
+
+IMPORTANT GUIDELINES:
+- Write the complete solution only in {target_language}.
+- If the aim mentions any other programming language, implement the same practical in {target_language} instead.
+- Do not include code, syntax, headers, libraries, build tools, or examples from any other language.
+- Keep comments minimal and only where genuinely needed.
+- Provide a brief academic explanation of the core concepts being targeted.
+- Show a realistic text output of running this {target_language} code.
+- Do NOT include shell prompts like student@kali. Just show raw console execution outputs.
+
+Respond EXACTLY in this format (use these exact tags):
+
+[CONCEPT]
+Write 3-4 lines explaining the concepts used. Academic style. Mention that the implementation uses {target_language}.
+
+[CODE]
+Write the full {target_language} source code. Plain text only, no markdown fences.
+
+[OUTPUT]
+Show REALISTIC output from running the code.
+Make it look like a real terminal or console output. Do not show generic placeholder output.
+
+[CAPTION]
+Write a very short (3-5 words) descriptive caption for the output.
+
+FINAL REMINDER: The [CODE] section MUST contain {target_language} code. Do NOT write code in any other language regardless of what the aim says.{variation_note}"""
+        return [
+            {'role': 'system', 'content': system},
+            {'role': 'user', 'content': user},
+        ]
+
+    # Default generic coding mode (no language lock)
+    system = (
+        "You are an expert programming lab assistant. You always respond using the exact section "
+        "tags requested, with realistic console output and no placeholders."
+    )
+    user = f"""Experiment aim:
+
+"{aim}"
+
+IMPORTANT GUIDELINES:
+- Write clean and well-structured code.
+- Provide a brief academic explanation of the core concepts being targeted.
+- Show a realistic text output of running this code.
+- If it's a programming language, provide the full source code.
+- Do NOT include shell prompts like student@kali. Just show raw console execution outputs.
+
+Respond EXACTLY in this format (use these exact tags):
+
+[CONCEPT]
+Write 3-4 lines explaining the concepts used. Academic style.
+
+[CODE]
+Write the code. Plain text only, no markdown fences.
+Keep comments minimal — only where genuinely needed.
+
+[OUTPUT]
+Show REALISTIC output from running the code.
+Make it look like a real terminal or console output. Do not show generic placeholder output.
+
+[CAPTION]
+Write a very short (3-5 words) descriptive caption for the output.{variation_note}"""
+    return [
+        {'role': 'system', 'content': system},
+        {'role': 'user', 'content': user},
+    ]
+
+
+def parse_generation_text(text, mode, target_language=''):
+    """Parse a raw LLM response into a result dict with concept/code/output/steps/caption."""
+    concept = extract_section("CONCEPT", text)
+    caption = extract_section("CAPTION", text)
+    if not concept:
+        concept = "No concept description provided by API."
+    if not caption:
+        caption = "Experiment Output"
+
+    result = {
+        'concept': concept,
+        'caption': caption,
+        'mode': mode,
+    }
+    if mode in ('general', 'language'):
+        result['code_language'] = target_language
+
+    if mode == 'os':
+        procedure = extract_section("PROCEDURE", text) or "No procedure provided."
+        procedure = re.sub(r'```[a-zA-Z]*', '', procedure).replace('```', '').strip()
+        steps = parse_steps(procedure)
+        result['steps'] = steps
+        result['code'] = '\n\n'.join([f"Step {s['num']}: {s['explanation']}\n{s['command']}" for s in steps])
+        result['output'] = '\n\n'.join([s['output'] for s in steps if s['output']])
+    else:
+        code = extract_section("CODE", text) or ""
+        output_part = extract_section("OUTPUT", text) or "No output provided."
+
+        code = re.sub(r'```[a-zA-Z]*', '', code).replace('```', '').strip()
+        output_part = re.sub(r'```', '', output_part).strip()
+
+        result['code'] = code
+        result['output'] = output_part
+
+    return result
+
 
 @app.route('/')
 def serve_index():
@@ -348,13 +761,23 @@ def api_generate():
         model = data.get('model', 'llama-3.3-70b-versatile')
         mode = data.get('mode', 'general')
         target_language = data.get('code_language', '').strip()
+        variation_seed = str(data.get('variation_seed', '') or '').strip()
+        auto_detect = bool(data.get('auto_detect', False)) or mode == 'auto'
+
+        # Phase 3 — per-experiment auto-detect of mode + language from the aim text.
+        if auto_detect:
+            detected = detect_mode_and_language(aim)
+            mode = detected['mode']
+            if detected['code_language']:
+                target_language = detected['code_language']
+
         if mode in ('general', 'language') and not target_language:
             raise ValueError("Code language is required for General Coding mode.")
-        
+
         terminal_user = data.get('terminal_user', 'student')
         if not terminal_user.strip():
             terminal_user = 'student'
-            
+
         terminal_host = data.get('terminal_host', 'kali')
         if not terminal_host.strip():
             terminal_host = 'kali'
@@ -364,241 +787,41 @@ def api_generate():
             raise ValueError(f"Unsupported LLM provider: {provider}")
         selected_api_keys = get_provider_keys(selected_provider_config, api_key)
 
-        if mode == 'os':
-            prompt = f"""You are a professional Linux systems instructor preparing a practical lab file for a university Operating Systems course. Your instructor has assigned this aim:
+        messages = build_messages(
+            mode, aim, target_language, terminal_user, terminal_host, variation_seed
+        )
 
-"{aim}"
+        text = run_completion(
+            messages, provider, model, selected_provider_config, selected_api_keys,
+            temperature=0.7, top_p=0.9,
+        )
 
-Work through the aim methodically, step by step, like an experienced professional would demonstrate in a real lab. Before each command or code block, write a clear explanation (1-2 lines) of what it does and why. Then write the command. Then show what the terminal actually displayed.
+        result = parse_generation_text(text, mode, target_language)
+        validate_generation_result(mode, result.get('code'), result.get('concept'))
 
-If the aim asks you to explore a command with its options, use it normally first, then show a few useful options — just like you'd actually try them in a real lab session. Don't robotically list every flag. Use your judgement.
-
-If the aim asks for a C program (system calls, algorithms, etc.), write a clean, complete program. Compile and run it.
-
-If the aim has multiple parts or multiple commands, work through each one properly.
-
-Keep it natural. No filler. No padding. Just a real, useful practical.
-
-Respond in this exact format:
-
-[CONCEPT]
-4-5 lines explaining the core OS concepts behind this practical in academic language. Keep it concise and focused. If there is a specific term or technique that needs extra explanation (e.g., what a system call is, what a process control block does), add ONE short follow-up paragraph for it — but only if truly needed. Do not over-explain obvious things.
-
-[PROCEDURE]
-Plain text, no markdown fences. Write it as numbered steps. Each step MUST include its own output immediately after the command.
-
-Format each step EXACTLY like this:
-
-Step 1: <what you're doing and why>
-$ <command or code>
-Output:
-{terminal_user}@{terminal_host}:~$ <the command typed>
-<realistic terminal output for this specific command>
-
-Step 2: <what you're doing and why>
-$ <command or code>
-Output:
-{terminal_user}@{terminal_host}:~$ <the command typed>
-<realistic terminal output for this specific command>
-
-...and so on. Only what the aim needs.
-
-For C programs, write the full source code in one step (no $ prefix for the code itself), then compile and run as separate steps with $ prefix and their own outputs.
-
-CRITICAL — Terminal output rules:
-- The Output section for each step MUST start with the prompt and the command being typed on the FIRST line, then show the result below it. Do NOT add an extra prompt line at the end.
-- Use this prompt: {terminal_user}@{terminal_host}:~$
-- For root: root@{terminal_host}:~#
-- Real permissions, real file sizes, real dates (Feb-Mar 2026), real PIDs, real kernel (6.1.0-18-amd64)
-- No placeholders, no "...", no skipped output
-- Each step's output must be realistic and complete
-
-[CAPTION]
-3-5 word caption for the experiment.
-"""
-        elif mode in ('general', 'language'):
-            prompt = f"""You are an expert programming lab assistant. For this experiment aim:
-
-"{aim}"
-
-The user selected General Coding mode with this required code language: {target_language}
-
-IMPORTANT GUIDELINES:
-- Write the complete solution only in {target_language}.
-- If the aim mentions any other programming language, ignore that language request and implement the same practical in {target_language}.
-- Do not include code, syntax, headers, libraries, build tools, or examples from any other language.
-- Keep comments minimal and only where genuinely needed.
-- Provide a brief academic explanation of the core concepts being targeted.
-- Show a realistic text output of running this {target_language} code.
-- Do NOT include shell prompts like student@kali. Just show raw console execution outputs.
-
-Respond EXACTLY in this format (use these exact tags):
-
-[CONCEPT]
-Write 3-4 lines explaining the concepts used. Academic style. Mention that the implementation uses {target_language}.
-
-[CODE]
-Write the full {target_language} source code. Plain text only, no markdown fences.
-
-[OUTPUT]
-Show REALISTIC output from running the code.
-Make it look like a real terminal or console output. Do not show generic placeholder output.
-
-[CAPTION]
-Write a very short (3-5 words) descriptive caption for the output.
-"""
-        else:
-            prompt = f"""You are an expert programming lab assistant. For this experiment aim:
-
-"{aim}"
-
-IMPORTANT GUIDELINES:
-- Write clean and well-structured code.
-- Provide a brief academic explanation of the core concepts being targeted.
-- Show a realistic text output of running this code.
-- If it's a programming language, provide the full source code.
-- Do NOT include shell prompts like student@kali. Just show raw console execution outputs.
-
-Respond EXACTLY in this format (use these exact tags):
-
-[CONCEPT]
-Write 3-4 lines explaining the concepts used. Academic style.
-
-[CODE]
-Write the code. Plain text only, no markdown fences.
-Keep comments minimal — only where genuinely needed.
-
-[OUTPUT]
-Show REALISTIC output from running the code.
-Make it look like a real terminal or console output. Do not show generic placeholder output.
-
-[CAPTION]
-Write a very short (3-5 words) descriptive caption for the output.
-"""
-
-        provider_attempts = [{
-            'provider': provider,
-            'model': model,
-            'config': selected_provider_config,
-            'keys': selected_api_keys,
-        }]
-        if provider == 'cerebras':
-            groq_config = LLM_PROVIDERS['groq']
-            provider_attempts.append({
-                'provider': 'groq',
-                'model': 'llama-3.3-70b-versatile',
-                'config': groq_config,
-                'keys': get_provider_keys(groq_config, ''),
-            })
-        if provider == 'freemodel_anthropic':
-            fallback_model = selected_provider_config.get('fallback_model', 'claude-sonnet-4-6')
-            if model != fallback_model:
-                provider_attempts.append({
-                    'provider': provider,
-                    'model': fallback_model,
-                    'config': selected_provider_config,
-                    'keys': selected_api_keys,
-                })
-
-        # Retry with backoff for rate limiting (429)
-        max_retries = 3
-        for attempt in range(max_retries + 1):
-            for provider_attempt in provider_attempts:
-                attempt_provider = provider_attempt['provider']
-                attempt_model = provider_attempt['model']
-                attempt_config = provider_attempt['config']
-                attempt_keys = provider_attempt['keys']
-
-                for key_index, selected_key in enumerate(attempt_keys or ['']):
-                    try:
-                        text = create_chat_completion(
-                            attempt_provider,
-                            selected_key,
-                            model=attempt_model,
-                            messages=[{'role': 'user', 'content': prompt}],
-                        )
-                        break
-                    except Exception as api_err:
-                        err_str = str(api_err)
-                        is_rate_limited = '429' in err_str or 'rate' in err_str.lower()
-                        is_bad_key = (
-                            '401' in err_str
-                            or 'invalid api key' in err_str.lower()
-                            or 'expired_api_key' in err_str.lower()
-                            or 'authentication' in err_str.lower()
-                        )
-                        is_invalid_model = (
-                            'invalid_request' in err_str.lower()
-                            and 'model' in err_str.lower()
-                        ) or '暂未开放' in err_str
-                        has_backup_key = key_index < len(attempt_keys) - 1
-
-                        if (is_rate_limited or is_bad_key) and has_backup_key:
-                            print(f"{attempt_config['label']} key {key_index + 1} failed. Trying backup key...")
-                            continue
-
-                        if is_invalid_model and provider_attempt is not provider_attempts[-1]:
-                            print(f"{attempt_config['label']} model {attempt_model} failed. Trying fallback model...")
-                            break
-
-                        if is_rate_limited and provider_attempt is not provider_attempts[-1]:
-                            print(f"{attempt_config['label']} is busy. Falling back to {provider_attempts[-1]['config']['label']}...")
-                            break
-
-                        if is_rate_limited and attempt < max_retries:
-                            wait_time = 15 * (2 ** attempt)  # 15s, 30s, 60s
-                            print(f"Rate limited. Waiting {wait_time}s before retry {attempt + 1}/{max_retries}...")
-                            time.sleep(wait_time)
-                            break
-
-                        raise
-
-                if 'text' in locals():
-                    break
-
-            if 'text' in locals():
-                break
-
-        def extract_section(tag, text):
-            pattern = rf"\[{tag}\](.*?)(?=\[(?:CONCEPT|CODE|PROCEDURE|OUTPUT|CAPTION)\]|$)"
-            match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-            
-            if match:
-                return match.group(1).strip()
-            
-            pattern_fallback = rf"(?:\*\*|##\s*)?{tag}(?:\*\*|:)?\s*\n(.*?)(?=\n(?:\*\*|##\s*)?(?:CONCEPT|CODE|PROCEDURE|OUTPUT|CAPTION)(?:\*\*|:)?\s*\n|\Z)"
-            match_fallback = re.search(pattern_fallback, text, re.DOTALL | re.IGNORECASE)
-            return match_fallback.group(1).strip() if match_fallback else None
-
-        concept = extract_section("CONCEPT", text)
-        caption = extract_section("CAPTION", text)
-        if not concept: concept = "No concept description provided by API."
-        if not caption: caption = "Experiment Output"
-
-        result = {
-            'concept': concept,
-            'caption': caption,
-            'mode': mode
-        }
-        if mode in ('general', 'language'):
-            result['code_language'] = target_language
-
-        if mode == 'os':
-            procedure = extract_section("PROCEDURE", text) or "No procedure provided."
-            procedure = re.sub(r'```[a-zA-Z]*', '', procedure).replace('```', '').strip()
-            steps = parse_steps(procedure)
-            result['steps'] = steps
-            result['code'] = '\n\n'.join([f"Step {s['num']}: {s['explanation']}\n{s['command']}" for s in steps])
-            result['output'] = '\n\n'.join([s['output'] for s in steps if s['output']])
-        else:
-            code = extract_section("CODE", text) or "// No code provided."
-            output_part = extract_section("OUTPUT", text) or "No output provided."
-            
-            code = re.sub(r'```[a-zA-Z]*', '', code).replace('```', '').strip()
-            output_part = re.sub(r'```', '', output_part).strip()
-
-            result['code'] = code
-            result['output'] = output_part
+        # Bug 5 — verify the generated code is actually in the requested language.
+        # If not, retry once with an explicit correction instruction.
+        if mode in ('general', 'language') and target_language:
+            if not validate_code_language(result.get('code', ''), target_language):
+                print(f"Language validation failed for {target_language}. Retrying with correction...")
+                correction = (
+                    f"The previous attempt produced code in the WRONG language. "
+                    f"Rewrite this experiment using ONLY {target_language}."
+                )
+                retry_messages = build_messages(
+                    mode, f"{correction}\n\nOriginal aim: {aim}",
+                    target_language, terminal_user, terminal_host, variation_seed,
+                )
+                text = run_completion(
+                    retry_messages, provider, model, selected_provider_config, selected_api_keys,
+                    temperature=0.5, top_p=0.9,
+                )
+                result = parse_generation_text(text, mode, target_language)
+                validate_generation_result(mode, result.get('code'), result.get('concept'))
+                if not validate_code_language(result.get('code', ''), target_language):
+                    raise ValueError(
+                        f"LLM repeatedly produced code in the wrong language (expected {target_language})."
+                    )
 
         return jsonify(result)
     except Exception as e:
@@ -611,7 +834,6 @@ Write a very short (3-5 words) descriptive caption for the output.
         elif "429" in error_msg or "Rate limit" in error_msg:
             status_code = 429
         return jsonify({'error': error_msg}), status_code
-
 
 
 # ==================== API: Download .docx ====================
