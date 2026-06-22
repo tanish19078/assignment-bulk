@@ -4,6 +4,7 @@ import io
 import time
 import os
 import gzip
+import zipfile
 import traceback
 import urllib.error
 import urllib.request
@@ -1233,133 +1234,161 @@ def add_normal_para(doc, text, font_name='Times New Roman', size=12, align=None)
     return p
 
 
+def embed_output_image(doc, output_text, caption_text, exp_no, step_no,
+                       terminal_img_width, image_width_inches, font_name, caption_size, code_size):
+    """Render `output_text` as a terminal image, embed it, and ALWAYS free the buffer.
+
+    Falls back to plain code text if image generation fails. Centralises the
+    Bug 4 memory fix: every BytesIO buffer is closed after use.
+    """
+    img_buf = None
+    try:
+        img_buf = create_terminal_image(output_text, terminal_img_width)
+        pic_para = doc.add_paragraph()
+        pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = pic_para.add_run()
+        run.add_picture(img_buf, width=Inches(image_width_inches))
+        add_caption_para(doc, caption_text, exp_no, step_no, font_name, caption_size)
+    except Exception as img_err:
+        print(f"DEBUG: terminal image error (exp {exp_no}, step {step_no}): {img_err}")
+        add_code_para(doc, output_text, font_name, code_size)
+    finally:
+        if img_buf is not None:
+            img_buf.close()
+            del img_buf
+
+
+def count_output_units(experiments):
+    """Total number of terminal images a batch will produce (steps, min 1 per experiment)."""
+    return sum(max(len(exp.get('steps', []) or []), 1) for exp in experiments)
+
+
+def build_document(experiments, settings, mode):
+    """Build a .docx from experiments and return a seeked BytesIO. Reused by
+    /api/download and /api/classroom-zip."""
+    settings = settings or {}
+    font_name = settings.get('fontName', 'Times New Roman')
+    body_size = int(settings.get('bodySize', 12))
+    heading_size = int(settings.get('headingSize', 14))
+    code_size = int(settings.get('codeSize', 10))
+    caption_size = int(settings.get('captionSize', 10))
+    image_width_inches = float(settings.get('imageWidth', 5.0))
+    terminal_img_width = int(settings.get('terminalImgWidth', 600))
+
+    # Bug 4 — cap terminal image width on large batches to limit peak memory.
+    if len(experiments) > 15:
+        terminal_img_width = min(terminal_img_width, 500)
+
+    doc = Document()
+
+    for i, exp in enumerate(experiments, 1):
+        aim = exp.get('aim', 'N/A')
+        concept = exp.get('concept', 'No concept description provided.')
+        caption = exp.get('caption', 'Terminal Output Preview')
+        steps = exp.get('steps', [])
+
+        # Experiment heading
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(f'Experiment No. {i}')
+        run.bold = True
+        run.font.name = font_name
+        run.font.size = Pt(heading_size)
+        doc.add_paragraph('')
+
+        add_labeled_para(doc, 'Aim:', aim, font_name, body_size)
+        doc.add_paragraph('')
+
+        if mode == 'os':
+            add_bold_para(doc, 'Theory:', font_name, body_size)
+            add_normal_para(doc, concept, font_name, body_size)
+            doc.add_paragraph('')
+
+            # Procedure with per-step output images
+            add_bold_para(doc, 'Procedure:', font_name, body_size)
+
+            if steps:
+                for step in steps:
+                    step_num = step.get('num', '')
+                    explanation = step.get('explanation', '')
+                    command = step.get('command', '')
+                    output = step.get('output', '')
+
+                    # Step explanation
+                    add_normal_para(doc, f"Step {step_num}: {explanation}", font_name, body_size)
+
+                    # For multi-line code (C programs etc.), show source code as text
+                    is_multiline_code = command.count('\n') > 2
+                    if is_multiline_code:
+                        add_code_para(doc, command, font_name, code_size)
+
+                    # Output as terminal image
+                    if output.strip():
+                        embed_output_image(
+                            doc, output, make_step_caption(command), i, step_num,
+                            terminal_img_width, image_width_inches, font_name, caption_size, code_size,
+                        )
+
+                    doc.add_paragraph('')  # spacing between steps
+            else:
+                # Fallback
+                code = exp.get('code', '// No procedure available.')
+                output = exp.get('output', 'No output.')
+                add_code_para(doc, code, font_name, code_size)
+                doc.add_paragraph('')
+                add_bold_para(doc, 'Output:', font_name, body_size)
+                embed_output_image(
+                    doc, output, caption, i, None,
+                    terminal_img_width, image_width_inches, font_name, caption_size, code_size,
+                )
+
+        else:
+            code = exp.get('code', '// No code available.')
+            output = exp.get('output', 'Program executed successfully.')
+
+            add_labeled_para(doc, 'Concept Used:', concept, font_name, body_size)
+            doc.add_paragraph('')
+            add_bold_para(doc, 'Code:', font_name, body_size)
+            add_code_para(doc, code, font_name, code_size)
+            doc.add_paragraph('')
+            add_bold_para(doc, 'Output:', font_name, body_size)
+            embed_output_image(
+                doc, output, caption, i, None,
+                terminal_img_width, image_width_inches, font_name, caption_size, code_size,
+            )
+
+        if i < len(experiments):
+            doc.add_page_break()
+
+    file_buf = io.BytesIO()
+    doc.save(file_buf)
+    file_buf.seek(0)
+    return file_buf
+
+
 @app.route('/api/download', methods=['POST'])
 def api_download():
     try:
         data = read_download_payload()
         if not data:
             return jsonify({'error': 'No data received for export.'}), 400
-            
+
         experiments = data.get('experiments', [])
         if not experiments:
             return jsonify({'error': 'No experiment artifacts found to bundle.'}), 400
-            
+
+        # Bug 4 — reject batches that would build too many images at once.
+        total_units = count_output_units(experiments)
+        if total_units > 200:
+            return jsonify({
+                'error': f'Too many output units ({total_units}). Split into smaller batches.'
+            }), 400
+
         settings = data.get('settings', {})
-
-        font_name = settings.get('fontName', 'Times New Roman')
-        body_size = int(settings.get('bodySize', 12))
-        heading_size = int(settings.get('headingSize', 14))
-        code_size = int(settings.get('codeSize', 10))
-        caption_size = int(settings.get('captionSize', 10))
-        image_width_inches = float(settings.get('imageWidth', 5.0))
-        terminal_img_width = int(settings.get('terminalImgWidth', 600))
-        output_filename = settings.get('outputFilename', 'Generated_Practical_File.docx')
-
         mode = data.get('mode', 'general')
-        doc = Document()
+        output_filename = (settings or {}).get('outputFilename', 'Generated_Practical_File.docx')
 
-        for i, exp in enumerate(experiments, 1):
-            aim = exp.get('aim', 'N/A')
-            concept = exp.get('concept', 'No concept description provided.')
-            caption = exp.get('caption', 'Terminal Output Preview')
-            steps = exp.get('steps', [])
-
-            # Experiment heading
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(f'Experiment No. {i}')
-            run.bold = True
-            run.font.name = font_name
-            run.font.size = Pt(heading_size)
-            doc.add_paragraph('')
-
-            add_labeled_para(doc, 'Aim:', aim, font_name, body_size)
-            doc.add_paragraph('')
-            
-            if mode == 'os':
-                add_bold_para(doc, 'Theory:', font_name, body_size)
-                add_normal_para(doc, concept, font_name, body_size)
-                doc.add_paragraph('')
-
-                # Procedure with per-step output images
-                add_bold_para(doc, 'Procedure:', font_name, body_size)
-
-                if steps:
-                    for step in steps:
-                        step_num = step.get('num', '')
-                        explanation = step.get('explanation', '')
-                        command = step.get('command', '')
-                        output = step.get('output', '')
-
-                        # Step explanation
-                        add_normal_para(doc, f"Step {step_num}: {explanation}", font_name, body_size)
-                        
-                        # For multi-line code (C programs etc.), show source code as text
-                        is_multiline_code = command.count('\n') > 2
-                        if is_multiline_code:
-                            add_code_para(doc, command, font_name, code_size)
-
-                        # Output as terminal image
-                        if output.strip():
-                            try:
-                                img_buf = create_terminal_image(output, terminal_img_width)
-                                pic_para = doc.add_paragraph()
-                                pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                                run = pic_para.add_run()
-                                run.add_picture(img_buf, width=Inches(image_width_inches))
-                                add_caption_para(doc, make_step_caption(command), i, step_num, font_name, caption_size)
-                            except Exception as img_err:
-                                print(f"DEBUG: Step {step_num} image error: {img_err}")
-                                add_code_para(doc, output, font_name, code_size)
-                        
-                        doc.add_paragraph('')  # spacing between steps
-                else:
-                    # Fallback
-                    code = exp.get('code', '// No procedure available.')
-                    output = exp.get('output', 'No output.')
-                    add_code_para(doc, code, font_name, code_size)
-                    doc.add_paragraph('')
-                    add_bold_para(doc, 'Output:', font_name, body_size)
-                    try:
-                        img_buf = create_terminal_image(output, terminal_img_width)
-                        pic_para = doc.add_paragraph()
-                        pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        run = pic_para.add_run()
-                        run.add_picture(img_buf, width=Inches(image_width_inches))
-                        add_caption_para(doc, caption, i, None, font_name, caption_size)
-                    except Exception as img_err:
-                        print(f"DEBUG: Error creating terminal image: {img_err}")
-                        add_code_para(doc, output, font_name, code_size)
-
-            else:
-                code = exp.get('code', '// No code available.')
-                output = exp.get('output', 'Program executed successfully.')
-
-                add_labeled_para(doc, 'Concept Used:', concept, font_name, body_size)
-                doc.add_paragraph('')
-                add_bold_para(doc, 'Code:', font_name, body_size)
-                add_code_para(doc, code, font_name, code_size)
-                doc.add_paragraph('')
-                add_bold_para(doc, 'Output:', font_name, body_size)
-
-                try:
-                    img_buf = create_terminal_image(output, terminal_img_width)
-                    pic_para = doc.add_paragraph()
-                    pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    run = pic_para.add_run()
-                    run.add_picture(img_buf, width=Inches(image_width_inches))
-                    add_caption_para(doc, caption, i, None, font_name, caption_size)
-                except Exception as img_err:
-                    print(f"DEBUG: Error creating terminal image: {img_err}")
-                    add_normal_para(doc, f'[Visual Output Unavailable - Log Trace follows]', font_name, body_size)
-                    add_code_para(doc, output, font_name, code_size)
-
-            if i < len(experiments):
-                doc.add_page_break()
-
-        file_buf = io.BytesIO()
-        doc.save(file_buf)
-        file_buf.seek(0)
+        file_buf = build_document(experiments, settings, mode)
 
         return send_file(
             file_buf,
@@ -1372,6 +1401,55 @@ def api_download():
     except Exception as e:
         print(f"CRITICAL EXPORT ERROR: {traceback.format_exc()}")
         return jsonify({'error': f'Export Pipeline Fault: {str(e)}'}), 500
+
+
+# ==================== API: Classroom Bulk Variations ZIP (Phase 3) ====================
+@app.route('/api/classroom-zip', methods=['POST'])
+def api_classroom_zip():
+    try:
+        data = read_download_payload()
+        if not data:
+            return jsonify({'error': 'No data received for classroom export.'}), 400
+
+        students = data.get('students', [])
+        if not students:
+            return jsonify({'error': 'No student variations found to bundle.'}), 400
+
+        settings = data.get('settings', {})
+        mode = data.get('mode', 'general')
+        zip_name = (settings or {}).get('zipFilename', 'Classroom_Variations.zip')
+
+        # Guard against runaway batches (per-student unit budget shared across the zip).
+        total_units = sum(count_output_units(s.get('experiments', []) or []) for s in students)
+        if total_units > 600:
+            return jsonify({
+                'error': f'Too many total output units ({total_units}). Reduce students or experiments.'
+            }), 400
+
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for idx, student in enumerate(students, 1):
+                experiments = student.get('experiments', []) or []
+                if not experiments:
+                    continue
+                name = student.get('name') or f'Student_{idx:02d}'
+                safe_name = re.sub(r'[^A-Za-z0-9_-]+', '_', str(name)).strip('_') or f'Student_{idx:02d}'
+                doc_buf = build_document(experiments, settings, mode)
+                zf.writestr(f'{safe_name}.docx', doc_buf.getvalue())
+                doc_buf.close()
+
+        zip_buf.seek(0)
+        return send_file(
+            zip_buf,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=zip_name,
+        )
+    except DownloadRequestError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"CRITICAL CLASSROOM EXPORT ERROR: {traceback.format_exc()}")
+        return jsonify({'error': f'Classroom Export Fault: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
