@@ -761,6 +761,8 @@ def api_generate():
         provider = data.get('provider', 'groq')
         model = data.get('model', 'llama-3.3-70b-versatile')
         mode = data.get('mode', 'general')
+        if mode == 'coding':  # frontend label → backend language-locked mode
+            mode = 'general'
         target_language = data.get('code_language', '').strip()
         variation_seed = str(data.get('variation_seed', '') or '').strip()
         auto_detect = bool(data.get('auto_detect', False)) or mode == 'auto'
@@ -897,6 +899,8 @@ def api_refine():
         provider = data.get('provider', 'groq')
         model = data.get('model', 'llama-3.3-70b-versatile')
         mode = data.get('mode', 'general')
+        if mode == 'coding':
+            mode = 'general'
         target_language = data.get('code_language', '').strip()
 
         terminal_user = (data.get('terminal_user') or 'student').strip() or 'student'
@@ -1299,7 +1303,10 @@ def build_document(experiments, settings, mode):
         add_labeled_para(doc, 'Aim:', aim, font_name, body_size)
         doc.add_paragraph('')
 
-        if mode == 'os':
+        # Per-experiment OS detection so Auto-mode mixed batches export correctly.
+        exp_is_os = (mode == 'os') or bool(steps)
+
+        if exp_is_os:
             add_bold_para(doc, 'Theory:', font_name, body_size)
             add_normal_para(doc, concept, font_name, body_size)
             doc.add_paragraph('')
