@@ -80,6 +80,12 @@ function compactOutputForExport(output, profile) {
   return compacted.join('\n');
 }
 
+// An experiment renders as OS (step-by-step) when the global mode is OS, or when
+// Auto-mode produced steps for it. Keeps mixed batches correct.
+function expIsOs(exp) {
+  return state.config.mode === 'os' || (Array.isArray(exp.steps) && exp.steps.length > 0);
+}
+
 function getDownloadExperiments(profile) {
   return state.experiments.filter(e => e.status === 'complete').map((exp) => {
     const base = {
@@ -88,7 +94,7 @@ function getDownloadExperiments(profile) {
       caption: exp.caption || 'Experiment Output'
     };
 
-    if (state.config.mode === 'os') {
+    if (expIsOs(exp)) {
       return {
         ...base,
         steps: (exp.steps || []).map((step) => ({
@@ -109,10 +115,8 @@ function getDownloadExperiments(profile) {
 }
 
 function getExportUnitCount() {
-  if (state.config.mode !== 'os') return state.experiments.filter(e => e.status === 'complete').length;
-
   return state.experiments.filter(e => e.status === 'complete').reduce((count, exp) => {
-    return count + Math.max((exp.steps || []).length, 1);
+    return count + (expIsOs(exp) ? Math.max((exp.steps || []).length, 1) : 1);
   }, 0);
 }
 
@@ -367,9 +371,13 @@ function selectMode(mode) {
   state.config.mode = mode;
   document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('selected', c.dataset.mode === mode));
   const opts = document.getElementById('mode-options');
-  opts.style.display = 'block';
-  document.getElementById('os-options').style.display = mode === 'os' ? 'block' : 'none';
-  document.getElementById('coding-options').style.display = mode === 'coding' ? 'block' : 'none';
+  // Auto mode classifies each aim at generation time; OS + coding options both apply.
+  opts.style.display = mode === 'auto' ? 'none' : 'block';
+  document.getElementById('os-options').style.display = (mode === 'os' || mode === 'auto') ? 'block' : 'none';
+  document.getElementById('coding-options').style.display = (mode === 'coding' || mode === 'auto') ? 'block' : 'none';
+  if (mode === 'auto') {
+    opts.style.display = 'block';
+  }
 }
 
 function selectModelConfig(id) {
@@ -558,68 +566,104 @@ async function startGeneration() {
 
   addGenLog(`Initialized generation pipeline with ${aims.length} experiment(s)`, 'info');
   addGenLog(`Target: ${provider ? provider.toUpperCase() : 'CUSTOM'} / ${model.toUpperCase()}`, 'info');
+  addGenLog('Concurrency: 3 experiments in parallel', 'info');
   addGenLog('---', 'info');
 
-  for (let i = 0; i < state.experiments.length; i++) {
+  // Enhancement 1 — generate in parallel batches instead of one-at-a-time.
+  const BATCH_SIZE = 3;
+  for (let i = 0; i < state.experiments.length; i += BATCH_SIZE) {
     if (!state.isGenerating) break;
-
-    const exp = state.experiments[i];
-    exp.status = 'synthesizing';
-    renderExpGrid();
-    addGenLog(`Processing Seed ${i + 1}/${state.experiments.length}...`, 'info');
-
-    let success = false;
-    let attempts = 0;
-    const maxAttempts = 3; 
-
-    while (attempts < maxAttempts && !success && state.isGenerating) {
-      attempts++;
-      if (attempts > 1) {
-        addGenLog(`Retrying Seed ${i + 1} (Attempt ${attempts}/${maxAttempts})...`, 'warn');
-      }
-
-      try {
-        const seed = Math.random().toString(36).substring(2, 8);
-        const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            aim: exp.aim,
-            api_key: apiKey,
-            provider,
-            model,
-            mode: state.config.mode,
-            code_language: state.config.codeLang,
-            terminal_user: state.config.termUser,
-            terminal_host: state.config.termHost,
-            variation_seed: seed
-          })
-        });
-
-        const data = await response.json();
-        if (data.error) throw new Error(data.error);
-
-        exp.theory = data.concept || 'No concept description provided.';
-        exp.code = data.code || '// No code provided.';
-        exp.output = data.output || 'No output.';
-        exp.caption = data.caption || 'Experiment Output';
-        exp.steps = data.steps || [];
-        exp.status = 'complete';
-        success = true;
-
-        addGenLog(`Seed ${i + 1} complete`, 'success');
-      } catch (err) {
-        addGenLog(`Seed ${i + 1} attempt ${attempts} failed: ${err.message}`, 'error');
-        if (attempts >= maxAttempts) {
-          exp.status = 'failed';
-        }
-      }
-      renderExpGrid();
-      updateGenProgress();
-    }
+    const batch = state.experiments.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map((exp) => generateOne(exp.id)));
   }
 
   finishGeneration();
+}
+
+/**
+ * Resolve the active provider/model/apiKey from config + custom override.
+ * Shared by generation, retry, refine and classroom flows.
+ */
+function genContext() {
+  let provider = state.config.provider;
+  let model = state.config.model;
+  const customModel = document.getElementById('customModel').value.trim();
+  if (customModel) {
+    model = customModel;
+    if (!provider) provider = 'groq';
+  }
+  const apiKey = document.getElementById('apiKey').value.trim();
+  return { provider, model, apiKey };
+}
+
+/**
+ * Generate a single experiment (by id) with up to 3 attempts. Resolves
+ * independently so cards update as each finishes. Enhancement 1 + Bug 1 retry.
+ */
+async function generateOne(idx) {
+  const exp = state.experiments[idx];
+  if (!exp || !state.isGenerating) return;
+
+  const { provider, model, apiKey } = genContext();
+  const autoDetect = state.config.mode === 'auto';
+
+  exp.status = 'synthesizing';
+  renderExpGrid();
+  addGenLog(`Processing Seed ${idx + 1}/${state.experiments.length}...`, 'info');
+
+  let success = false;
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts && !success && state.isGenerating) {
+    attempts++;
+    if (attempts > 1) {
+      addGenLog(`Retrying Seed ${idx + 1} (Attempt ${attempts}/${maxAttempts})...`, 'warn');
+    }
+
+    try {
+      const seed = Math.random().toString(36).substring(2, 8);
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aim: exp.aim,
+          api_key: apiKey,
+          provider,
+          model,
+          mode: autoDetect ? 'auto' : state.config.mode,
+          auto_detect: autoDetect,
+          code_language: state.config.codeLang,
+          terminal_user: state.config.termUser,
+          terminal_host: state.config.termHost,
+          variation_seed: seed
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+
+      exp.theory = data.concept || 'No concept description provided.';
+      exp.code = data.code || '// No code provided.';
+      exp.output = data.output || 'No output.';
+      exp.caption = data.caption || 'Experiment Output';
+      exp.steps = data.steps || [];
+      if (data.code_language) exp.codeLanguage = data.code_language;
+      if (data.mode) exp.detectedMode = data.mode;
+      exp.status = 'complete';
+      success = true;
+
+      addGenLog(`Seed ${idx + 1} complete`, 'success');
+      persistSession();
+    } catch (err) {
+      addGenLog(`Seed ${idx + 1} attempt ${attempts} failed: ${err.message}`, 'error');
+      if (attempts >= maxAttempts) {
+        exp.status = 'failed';
+      }
+    }
+    renderExpGrid();
+    updateGenProgress();
+  }
 }
 
 function finishGeneration() {
@@ -630,7 +674,9 @@ function finishGeneration() {
   
   const failed = state.experiments.filter(e => e.status === 'failed').length;
   const complete = state.experiments.filter(e => e.status === 'complete').length;
-  
+
+  persistSession();
+
   addGenLog('---', 'info');
   addGenLog(`Generation complete: ${complete} succeeded, ${failed} failed`, failed > 0 ? 'warn' : 'success');
   
@@ -652,15 +698,9 @@ function stopGeneration() {
 async function retryExperiment(idx) {
   if (idx < 0 || idx >= state.experiments.length) return;
   const exp = state.experiments[idx];
-  
-  let provider = state.config.provider;
-  let model = state.config.model;
-  const customModel = document.getElementById('customModel').value.trim();
-  if (customModel) {
-    model = customModel;
-    if (!provider) provider = 'groq';
-  }
-  const apiKey = document.getElementById('apiKey').value.trim();
+
+  const { provider, model, apiKey } = genContext();
+  const autoDetect = state.config.mode === 'auto';
 
   exp.status = 'synthesizing';
   renderExpGrid();
@@ -676,7 +716,8 @@ async function retryExperiment(idx) {
         api_key: apiKey,
         provider,
         model,
-        mode: state.config.mode,
+        mode: autoDetect ? 'auto' : state.config.mode,
+        auto_detect: autoDetect,
         code_language: state.config.codeLang,
         terminal_user: state.config.termUser,
         terminal_host: state.config.termHost,
@@ -692,8 +733,10 @@ async function retryExperiment(idx) {
     exp.output = data.output || 'No output.';
     exp.caption = data.caption || 'Experiment Output';
     exp.steps = data.steps || [];
+    if (data.code_language) exp.codeLanguage = data.code_language;
     exp.status = 'complete';
 
+    persistSession();
     addGenLog(`Seed ${idx + 1} retry complete`, 'success');
   } catch (err) {
     exp.status = 'failed';
@@ -702,7 +745,7 @@ async function retryExperiment(idx) {
 
   renderExpGrid();
   updateGenProgress();
-  
+
   if (state.currentView === 'review') renderReview();
 }
 
@@ -777,7 +820,7 @@ function renderReview() {
     const isOpen = state.expandedExps.has(realIdx);
     
     let stepsHtml = '';
-    if (state.config.mode === 'os' && exp.steps && exp.steps.length > 0) {
+    if (expIsOs(exp) && exp.steps && exp.steps.length > 0) {
       stepsHtml = exp.steps.map(step => `
         <div style="margin-bottom:1.25rem;border-left:2px solid var(--accent-border);padding-left:1rem;">
           <p style="font-size:0.85rem;font-weight:600;color:var(--text);margin-bottom:0.4rem;">Step ${step.num}: ${escapeHtml(step.explanation)}</p>
@@ -807,7 +850,7 @@ function renderReview() {
         <div class="accordion-header" onclick="toggleAccordion(${realIdx})">
           <span style="font-size:0.75rem;font-family:'JetBrains Mono',monospace;color:var(--muted);flex-shrink:0;">EXP-${exp.number}</span>
           <span style="font-size:0.9rem;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:0.5rem;padding-right:0.5rem;">${escapeHtml(exp.aim)}</span>
-          <span class="badge badge-accent" style="flex-shrink:0;margin-right:0.5rem;">${state.config.mode === 'os' ? 'Linux' : (state.config.codeLang || 'C').toUpperCase()}</span>
+          <span class="badge badge-accent" style="flex-shrink:0;margin-right:0.5rem;">${expIsOs(exp) ? 'Linux' : (exp.codeLanguage || state.config.codeLang || 'C').toUpperCase()}</span>
           <button class="btn btn-ghost" style="padding:0.3rem 0.65rem;font-size:0.78rem;flex-shrink:0;margin-right:0.5rem;" onclick="event.stopPropagation();openRefineModal(${realIdx})">
             <i class="fas fa-wand-magic-sparkles"></i> REFINE
           </button>
@@ -876,23 +919,26 @@ async function applyRefine() {
   }
   const apiKey = document.getElementById('apiKey').value.trim();
 
-  const refinedAim = `Original Aim: ${exp.aim}\nRequested Change: ${input}`;
-
   try {
-    const seed = Math.random().toString(36).substring(2, 8);
-    const response = await fetch('/api/generate', {
+    // Bug 3 — call the dedicated /api/refine endpoint with the FULL existing
+    // experiment so the LLM edits it instead of regenerating from scratch.
+    const response = await fetch('/api/refine', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        aim: refinedAim,
+        aim: exp.aim,
+        change_request: input,
+        existing_concept: exp.theory,
+        existing_code: exp.code,
+        existing_output: exp.output,
+        existing_steps: exp.steps || [],
         api_key: apiKey,
         provider,
         model,
         mode: state.config.mode,
         code_language: state.config.codeLang,
         terminal_user: state.config.termUser,
-        terminal_host: state.config.termHost,
-        variation_seed: seed
+        terminal_host: state.config.termHost
       })
     });
 
@@ -904,7 +950,8 @@ async function applyRefine() {
     exp.output = data.output || 'No output.';
     exp.caption = data.caption || 'Experiment Output';
     exp.steps = data.steps || [];
-    
+
+    persistSession();
     showToast('success', `EXP-${exp.number} refined successfully.`);
     renderReview();
   } catch (err) {
@@ -969,6 +1016,13 @@ function addExportLog(message, type) {
 
 async function downloadDocument() {
   const btn = document.getElementById('downloadBtn');
+
+  // Bug 4 — warn before assembling a very large document.
+  const completeCount = state.experiments.filter(e => e.status === 'complete').length;
+  if (completeCount > 30) {
+    showToast('warn', `Large export (${completeCount} experiments). This may take a while or be split into smaller batches.`);
+  }
+
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Generating...';
 
@@ -1040,6 +1094,210 @@ function toggleClassroom() {
     knob.style.transform = 'translateX(0)';
     toggle.parentElement.querySelector('span:first-of-type').style.background = 'var(--border)';
   }
+}
+
+/* ============================
+   PHASE 3 — AUTO-DETECT MODE + LANGUAGE
+   ============================ */
+async function autoDetectAims() {
+  const aims = parseAims(state.aimsText);
+  if (aims.length === 0) {
+    showToast('warn', 'Write some aims first.');
+    return;
+  }
+  showToast('info', 'Analyzing aims...');
+  try {
+    const res = await fetch('/api/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aims })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const dets = data.detections || [];
+    const osCount = dets.filter(d => d.mode === 'os').length;
+    const genCount = dets.length - osCount;
+    const langs = [...new Set(dets.map(d => d.code_language).filter(Boolean))];
+
+    // If the batch is mixed, recommend Auto mode (per-experiment detection at generate time).
+    if (osCount > 0 && genCount > 0) {
+      state.config.mode = 'auto';
+      showToast('success', `Mixed batch detected (${osCount} OS, ${genCount} coding). Using Auto mode — each experiment is classified at generation.`);
+    } else if (osCount > 0) {
+      state.config.mode = 'os';
+      showToast('success', `Detected: OS practical mode for all ${osCount} aims.`);
+    } else {
+      state.config.mode = 'coding';
+      if (langs.length === 1) {
+        state.config.codeLang = langs[0];
+        const sel = document.getElementById('codeLang');
+        if (sel) sel.value = langs[0];
+      }
+      showToast('success', `Detected: General coding${langs.length ? ' (' + langs.join(', ') + ')' : ''}.`);
+    }
+  } catch (err) {
+    showToast('error', `Auto-detect failed: ${err.message}`);
+  }
+}
+
+/* ============================
+   PHASE 3 — SYLLABUS PDF IMPORT
+   ============================ */
+function importSyllabusPdf() {
+  document.getElementById('pdfInput').click();
+}
+
+async function handlePdfImport(e) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('error', 'Please choose a .pdf file.');
+    return;
+  }
+
+  showToast('info', `Extracting aims from ${file.name}...`);
+  const { provider, model, apiKey } = genContext();
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('api_key', apiKey);
+  form.append('provider', provider || 'groq');
+  form.append('model', model || 'llama-3.3-70b-versatile');
+
+  try {
+    const res = await fetch('/api/extract-aims', { method: 'POST', body: form });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (!data.aims || data.aims.length === 0) throw new Error('No aims found in the PDF.');
+
+    aimsEditor.value = data.text || data.aims.join('\n---\n');
+    updateEditorDisplay();
+    showToast('success', `Extracted ${data.aims.length} aim(s) from syllabus.`);
+  } catch (err) {
+    showToast('error', `PDF import failed: ${err.message}`);
+  }
+}
+
+/* ============================
+   PHASE 3 — CLASSROOM BULK VARIATIONS
+   ============================ */
+const CLASSROOM_MAX_STUDENTS = 12;
+
+async function downloadClassroomZip() {
+  const completeExps = state.experiments.filter(e => e.status === 'complete');
+  if (completeExps.length === 0) {
+    showToast('warn', 'Generate experiments first.');
+    return;
+  }
+
+  let count = parseInt(document.getElementById('studentCount').value, 10) || 0;
+  if (count < 2) { showToast('warn', 'Enter at least 2 students.'); return; }
+  if (count > CLASSROOM_MAX_STUDENTS) {
+    count = CLASSROOM_MAX_STUDENTS;
+    showToast('warn', `Capped at ${CLASSROOM_MAX_STUDENTS} students to stay within rate limits.`);
+  }
+
+  const btn = document.getElementById('classroomBtn');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+
+  const { provider, model, apiKey } = genContext();
+  const profile = EXPORT_PROFILES[0];
+  const students = [];
+
+  try {
+    for (let s = 0; s < count; s++) {
+      btn.innerHTML = `<div class="spinner"></div> Student ${s + 1}/${count}...`;
+
+      // Re-generate each experiment with a fresh seed → unique variation per student.
+      const variations = await Promise.all(completeExps.map(async (exp) => {
+        const seed = Math.random().toString(36).substring(2, 8);
+        try {
+          const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              aim: exp.aim,
+              api_key: apiKey,
+              provider,
+              model,
+              mode: state.config.mode === 'auto' ? 'auto' : state.config.mode,
+              auto_detect: state.config.mode === 'auto',
+              code_language: state.config.codeLang,
+              terminal_user: state.config.termUser,
+              terminal_host: state.config.termHost,
+              variation_seed: seed
+            })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          return packExperimentForExport({
+            aim: exp.aim,
+            theory: data.concept,
+            code: data.code,
+            output: data.output,
+            caption: data.caption,
+            steps: data.steps || []
+          }, profile);
+        } catch {
+          // Fall back to the original variation if a re-gen fails.
+          return packExperimentForExport(exp, profile);
+        }
+      }));
+
+      students.push({ name: `Student_${String(s + 1).padStart(2, '0')}`, experiments: variations });
+    }
+
+    btn.innerHTML = '<div class="spinner"></div> Zipping...';
+    const payload = { students, settings: getSettings(), mode: state.config.mode === 'auto' ? 'general' : state.config.mode };
+    const body = JSON.stringify(payload);
+    const compressed = await gzipText(body);
+    const headers = compressed ? { 'Content-Type': 'application/json', 'X-Content-Encoding': 'gzip' } : { 'Content-Type': 'application/json' };
+
+    const res = await fetch('/api/classroom-zip', { method: 'POST', headers, body: compressed || body });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Classroom export rejected.');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Classroom_Variations.zip';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+    showToast('success', `Downloaded ${count} unique variations.`);
+  } catch (err) {
+    showToast('error', `Classroom export failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+/* Shape an in-memory experiment into the backend export schema (mirrors getDownloadExperiments). */
+function packExperimentForExport(exp, profile) {
+  const base = {
+    aim: exp.aim,
+    concept: exp.theory,
+    caption: exp.caption || 'Experiment Output'
+  };
+  if (expIsOs(exp)) {
+    return {
+      ...base,
+      steps: (exp.steps || []).map((step) => ({
+        num: step.num,
+        explanation: step.explanation,
+        command: step.command,
+        output: compactOutputForExport(step.output, profile)
+      }))
+    };
+  }
+  return { ...base, code: exp.code, output: compactOutputForExport(exp.output, profile) };
 }
 
 /* ============================
@@ -1134,6 +1392,71 @@ function loadFromLocalStorage() {
 }
 
 /* ============================
+   SESSION PERSISTENCE (Enhancement 3)
+   sessionStorage auto-clears on browser close, avoiding stale data.
+   ============================ */
+const SESSION_KEY = 'practigen_session_v6';
+
+function persistSession() {
+  try {
+    const payload = {
+      experiments: state.experiments,
+      config: state.config,
+      aimsText: state.aimsText,
+      savedAt: Date.now()
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn('Could not persist session', err);
+  }
+}
+
+function maybeOfferRestore() {
+  let saved;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+  } catch {
+    saved = null;
+  }
+  if (!saved || !Array.isArray(saved.experiments) || saved.experiments.length === 0) return;
+
+  const done = saved.experiments.filter(e => e.status === 'complete').length;
+  const banner = document.getElementById('restoreBanner');
+  if (!banner) return;
+  document.getElementById('restoreText').textContent =
+    `Previous session found — ${done} experiment${done !== 1 ? 's' : ''} ready. Restore?`;
+  banner.style.display = 'flex';
+}
+
+function restoreSession() {
+  let saved;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+  } catch {
+    saved = null;
+  }
+  if (!saved) return;
+
+  state.experiments = saved.experiments || [];
+  state.config = { ...state.config, ...(saved.config || {}) };
+  state.aimsText = saved.aimsText || '';
+  state.generationComplete = true;
+
+  const banner = document.getElementById('restoreBanner');
+  if (banner) banner.style.display = 'none';
+
+  showToast('success', 'Session restored.');
+  navigate('review');
+}
+
+function clearSession() {
+  sessionStorage.removeItem(SESSION_KEY);
+  const banner = document.getElementById('restoreBanner');
+  if (banner) banner.style.display = 'none';
+  showToast('info', 'Saved session cleared.');
+}
+
+/* ============================
    INIT
    ============================ */
 function init() {
@@ -1141,9 +1464,12 @@ function init() {
   initProviders();
   loadFromLocalStorage();
   updateEditorDisplay();
-  
+
   // Select default provider model (first Groq)
   selectModelConfig('llama-3.3-70b-versatile');
+
+  // Enhancement 3 — offer to restore a previous session if one exists.
+  maybeOfferRestore();
 }
 
 init();
