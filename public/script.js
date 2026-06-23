@@ -34,12 +34,6 @@ const models = [
   { id: 'claude-sonnet-4-6', name: 'Claude 3.5 Sonnet', provider: 'freemodel_anthropic', providerLabel: 'FreeModel', desc: 'Industry standard for coding (Claude)' },
 ];
 
-const recentSessions = [
-  { id: 1, name: 'Operating Systems Practicals', count: 6, date: 'Dec 12, 2024', mode: 'os' },
-  { id: 2, name: 'Data Structures Practicals', count: 8, date: 'Dec 8, 2024', mode: 'coding' },
-  { id: 3, name: 'DBMS Lab Experiments', count: 12, date: 'Nov 29, 2024', mode: 'coding' },
-];
-
 const sampleAims = `Write a C program to implement FCFS CPU scheduling algorithm
 ---
 Write a C program to implement SJF (Non-preemptive) CPU scheduling algorithm
@@ -300,21 +294,54 @@ function initDashboard() {
   else if (h < 17) greet = 'Good afternoon';
   document.getElementById('greeting').textContent = greet + '.';
 
+  renderRecentSessions();
+}
+
+/* Render the most recent saved session (from sessionStorage), or an empty state. */
+function renderRecentSessions() {
   const container = document.getElementById('recent-sessions');
-  container.innerHTML = recentSessions.map(s => `
+  if (!container) return;
+
+  let saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+  } catch {
+    saved = null;
+  }
+
+  const exps = (saved && Array.isArray(saved.experiments)) ? saved.experiments : [];
+  if (exps.length === 0) {
+    container.innerHTML = `
+      <div class="card" style="padding:1.25rem;text-align:center;color:var(--muted);font-size:0.85rem;">
+        No recent sessions yet. Start a project — your progress is saved here until you close the tab.
+      </div>`;
+    return;
+  }
+
+  const done = exps.filter(e => e.status === 'complete').length;
+  const mode = (saved.config && saved.config.mode) || 'coding';
+  const isOs = mode === 'os';
+  const title = exps[0] && exps[0].aim ? exps[0].aim : 'Practical session';
+  const when = saved.savedAt
+    ? new Date(saved.savedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'recently';
+
+  container.innerHTML = `
     <div class="card" style="padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
       <div style="display:flex;align-items:center;gap:0.85rem;min-width:0;">
-        <div style="width:36px;height:36px;border-radius:8px;background:${s.mode === 'os' ? 'var(--accent-dim)' : 'var(--amber-dim)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <i class="fas ${s.mode === 'os' ? 'fa-terminal' : 'fa-code'}" style="font-size:0.8rem;color:${s.mode === 'os' ? 'var(--accent)' : 'var(--amber)'};"></i>
+        <div style="width:36px;height:36px;border-radius:8px;background:${isOs ? 'var(--accent-dim)' : 'var(--amber-dim)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fas ${isOs ? 'fa-terminal' : 'fa-code'}" style="font-size:0.8rem;color:${isOs ? 'var(--accent)' : 'var(--amber)'};"></i>
         </div>
         <div style="min-width:0;">
-          <p style="font-weight:600;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.name}</p>
-          <p style="font-size:0.75rem;color:var(--muted);">${s.count} experiments &middot; ${s.date}</p>
+          <p style="font-weight:600;font-size:0.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">${escapeHtml(title)}</p>
+          <p style="font-size:0.75rem;color:var(--muted);">${done} experiment${done !== 1 ? 's' : ''} ready &middot; ${when}</p>
         </div>
       </div>
-      <button class="btn btn-secondary" style="padding:0.4rem 0.85rem;font-size:0.8rem;" onclick="showToast('info','Session restore requires backend connection.')">Resume</button>
-    </div>
-  `).join('');
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn btn-secondary" style="padding:0.4rem 0.85rem;font-size:0.8rem;" onclick="restoreSession()">Resume</button>
+        <button class="btn btn-ghost" style="padding:0.4rem 0.7rem;font-size:0.8rem;" onclick="clearSession();renderRecentSessions();">Clear</button>
+      </div>
+    </div>`;
 }
 
 function startNewProject() {
