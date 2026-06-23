@@ -3,3 +3,4 @@ Pillow
 Flask
 Flask-CORS
 python-dotenv
+pypdf
