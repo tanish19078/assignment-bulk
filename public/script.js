@@ -298,7 +298,7 @@ function initDashboard() {
   let greet = 'Good evening';
   if (h < 12) greet = 'Good morning';
   else if (h < 17) greet = 'Good afternoon';
-  document.getElementById('greeting').textContent = greet + ', Researcher.';
+  document.getElementById('greeting').textContent = greet + '.';
 
   const container = document.getElementById('recent-sessions');
   container.innerHTML = recentSessions.map(s => `
@@ -564,7 +564,7 @@ async function startGeneration() {
   navigate('generation');
   renderExpGrid();
 
-  addGenLog(`Initialized generation pipeline with ${aims.length} experiment(s)`, 'info');
+  addGenLog(`Starting generation for ${aims.length} experiment(s)`, 'info');
   addGenLog(`Target: ${provider ? provider.toUpperCase() : 'CUSTOM'} / ${model.toUpperCase()}`, 'info');
   addGenLog('Concurrency: 3 experiments in parallel', 'info');
   addGenLog('---', 'info');
@@ -609,7 +609,7 @@ async function generateOne(idx) {
 
   exp.status = 'synthesizing';
   renderExpGrid();
-  addGenLog(`Processing Seed ${idx + 1}/${state.experiments.length}...`, 'info');
+  addGenLog(`Generating experiment ${idx + 1}/${state.experiments.length}...`, 'info');
 
   let success = false;
   let attempts = 0;
@@ -618,7 +618,7 @@ async function generateOne(idx) {
   while (attempts < maxAttempts && !success && state.isGenerating) {
     attempts++;
     if (attempts > 1) {
-      addGenLog(`Retrying Seed ${idx + 1} (Attempt ${attempts}/${maxAttempts})...`, 'warn');
+      addGenLog(`Retrying experiment ${idx + 1} (attempt ${attempts}/${maxAttempts})...`, 'warn');
     }
 
     try {
@@ -653,10 +653,10 @@ async function generateOne(idx) {
       exp.status = 'complete';
       success = true;
 
-      addGenLog(`Seed ${idx + 1} complete`, 'success');
+      addGenLog(`Experiment ${idx + 1} complete`, 'success');
       persistSession();
     } catch (err) {
-      addGenLog(`Seed ${idx + 1} attempt ${attempts} failed: ${err.message}`, 'error');
+      addGenLog(`Experiment ${idx + 1} attempt ${attempts} failed: ${err.message}`, 'error');
       if (attempts >= maxAttempts) {
         exp.status = 'failed';
       }
@@ -704,7 +704,7 @@ async function retryExperiment(idx) {
 
   exp.status = 'synthesizing';
   renderExpGrid();
-  addGenLog(`Retrying Seed ${idx + 1}...`, 'warn');
+  addGenLog(`Retrying experiment ${idx + 1}...`, 'warn');
 
   try {
     const seed = Math.random().toString(36).substring(2, 8);
@@ -737,10 +737,10 @@ async function retryExperiment(idx) {
     exp.status = 'complete';
 
     persistSession();
-    addGenLog(`Seed ${idx + 1} retry complete`, 'success');
+    addGenLog(`Experiment ${idx + 1} retry complete`, 'success');
   } catch (err) {
     exp.status = 'failed';
-    addGenLog(`Seed ${idx + 1} retry failed: ${err.message}`, 'error');
+    addGenLog(`Experiment ${idx + 1} retry failed: ${err.message}`, 'error');
   }
 
   renderExpGrid();
@@ -754,7 +754,7 @@ function renderExpGrid() {
   grid.innerHTML = state.experiments.map((exp, i) => {
     const statusIcons = { queued: 'fa-clock', synthesizing: 'fa-spinner fa-spin', complete: 'fa-circle-check', failed: 'fa-circle-xmark' };
     const statusColors = { queued: 'var(--muted)', synthesizing: 'var(--accent)', complete: 'var(--success)', failed: 'var(--error)' };
-    const statusLabels = { queued: 'QUEUED', synthesizing: 'SYNTHESIZING', complete: 'COMPLETE', failed: 'FAILED' };
+    const statusLabels = { queued: 'QUEUED', synthesizing: 'GENERATING', complete: 'COMPLETE', failed: 'FAILED' };
     return `
       <div class="exp-card ${exp.status}">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
