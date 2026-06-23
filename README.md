@@ -1,66 +1,151 @@
-# PractiGen — Auto Practical File Generator
+# PractiGen
 
-PractiGen is an AI-powered tool designed to automate the creation of programming practical lab documents. It generates concepts, source code, and realistic terminal outputs for experiment aims, then packages them into a professionally formatted `.docx` file.
+Turn a list of experiment aims into a formatted, submission-ready `.docx` practical file. Paste your aims, pick a model, and PractiGen writes the theory, code, and realistic terminal/console output for each one — then bundles everything into a single Word document.
 
-## 🚀 Features
-
-- **AI-Powered Generation**: Uses OpenAI-compatible free-tier LLM APIs to generate academic content.
-- **Support for Multiple Languages**: Automatically detects and generates code for C, Python, JavaScript, etc.
-- **Customizable Formatting**: Configure fonts (Times New Roman, Arial, etc.) and sizes for body text, headings, and code.
-- **Live Preview**: Parse experiment aims using `---` dividers and preview the generated content before downloading.
-- **Mock Mode**: Test the UI and workflow without consuming API credits.
-- **Vercel Optimized**: Built with a vanilla JS frontend and Python serverless functions for zero-configuration deployment.
-
-## 🛠️ Technical Stack
-
-- **Frontend**: Vanilla JavaScript (ES6+), CSS3 (Custom Properties, Glassmorphism), Semantic HTML5.
-- **Backend**: Python 3.9+ (Serverless Functions).
-- **API**: Provider-selectable LLM inference through Groq, Cerebras, FreeModel OpenAI-compatible chat completions, and FreeModel Anthropic-compatible messages.
-- **Document Generation**: `python-docx` for structured Word document creation.
-- **Styling**: Modern dark-themed UI with responsive grid layouts and animations.
-
-## 📦 Installation & Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/tanish19078/assignment-bulk
-   cd frontend
-   ```
-
-2. **Install Dependencies**:
-   ```bash
-   pip install -r frontend/requirements.txt
-   ```
-
-3. **Run Locally**:
-   You can run the Python scripts directly or deploy to Vercel using:
-   ```bash
-   vercel dev
-   ```
-
-4. **API Key**:
-   Choose a model in the configuration panel and enter that provider's API key. If the key field is empty, PractiGen reads provider-specific environment variables:
-
-   - `GROQ_API_KEY`
-   - repeated `GROQ_API_KEY` entries are used as backup keys
-   - `CEREBRAS_API_KEY`
-   - `FREEMODEL_API_KEY`
-   - `FREEMODEL_OPENAI_API_KEY`
-   - `FREEMODEL_ANTHROPIC_API_KEY`
-
-   The FreeModel OpenAI preset calls `https://api.freemodel.dev/v1/chat/completions`.
-   The FreeModel Claude preset calls `https://cc.freemodel.dev/v1/messages`.
-   Use the Custom Model ID field when your FreeModel account exposes a different model name.
-
-## 📂 Project Structure
-
-- `frontend/`: Contains the main application.
-  - `public/`: Static assets (HTML, CSS, JS).
-  - `api/`: Python serverless functions for parsing, generation, and downloading.
-- `aims.txt`: Sample input file for experiment aims.
+Built for students who keep a practical lab file: OS labs (step-by-step Linux commands with terminal screenshots) and general programming labs (C, C++, Python, Java, JavaScript).
 
 ---
-Built with ⚡ by PractiGen.
 
+## Features
 
+- **Aim → document in one flow.** Paste aims separated by `---`, generate, review, download.
+- **Two lab styles.** OS mode produces numbered steps with rendered terminal-output images; coding mode produces a concept, source code, and console output.
+- **Auto-detect.** Let PractiGen infer the right mode and language per aim — a mixed batch of "explore `grep`" and "binary search in Java" is classified per experiment.
+- **Language lock.** Choose a language and the output stays in it, even if an aim says otherwise. Generated code is heuristically validated and regenerated once if it comes back in the wrong language.
+- **Plagiarism-safe variation.** Every generation uses a random variation seed, so the same aim produces different variable names, examples, and sample data each time.
+- **Targeted refine.** Ask for a specific change ("add comments", "use different variable names") and only that changes — the rest of the experiment is preserved.
+- **Classroom mode.** Generate N unique variations of the same aims (one `.docx` per student) and download them as a single ZIP.
+- **Syllabus import.** Upload a course syllabus PDF and PractiGen extracts the experiment aims for you.
+- **Resilient generation.** Concurrent batches, per-experiment retry, multi-provider fallback, and key rotation. A failed experiment can be retried on its own without re-running the batch.
+- **Session restore.** Work survives an accidental tab refresh via `sessionStorage`.
+- **Multi-provider.** Groq, Cerebras, and FreeModel (OpenAI- and Anthropic-compatible) with automatic fallback.
 
+---
+
+## Architecture
+
+```
+Browser (public/)                    Flask API (app.py)              LLM providers
+─────────────────                    ──────────────────              ─────────────
+index.html  — SPA markup             /api/parse        split aims    Groq        (OpenAI fmt)
+script.js   — state + API calls      /api/generate     write lab     Cerebras    (OpenAI fmt)
+style.css   — dark UI                /api/refine       targeted edit FreeModel   (OpenAI fmt)
+                                     /api/detect       auto-classify FreeModel   (Anthropic fmt)
+                                     /api/extract-aims syllabus PDF
+                                     /api/download     build .docx
+                                     /api/classroom-zip per-student ZIP
+```
+
+- **Frontend** is a dependency-free single-page app (vanilla ES6, no build step). All UI state lives in one `state` object in `script.js`.
+- **Backend** is a single Flask module. LLM requests go through one shared runner (`run_completion`) that handles retries, exponential backoff on rate limits, provider/model fallback, and API-key rotation.
+- **Documents** are assembled with `python-docx`. Terminal/console output is rendered to a PNG with Pillow and embedded as an image, mirroring how a real practical file looks.
+- **Deployment** targets Vercel serverless (`vercel.json` routes `/api/*` → `app.py`, everything else → `public/`).
+
+### Request flow
+
+1. Configure mode, model/provider, API key, and formatting.
+2. Paste aims separated by `---`.
+3. Generate — experiments run in concurrent batches of 3, each with its own retry loop. Cards update independently as they finish.
+4. Review the theory/code/output; refine any experiment in place.
+5. Download a single `.docx`, or enable Classroom mode for a ZIP of per-student variations.
+
+---
+
+## Getting started
+
+### Prerequisites
+
+- Python 3.9+
+- An API key for at least one provider (Groq, Cerebras, or FreeModel), or set the matching environment variable.
+
+### Local development
+
+```bash
+git clone https://github.com/tanish19078/generateassignment
+cd generateassignment
+
+pip install -r requirements.txt
+python app.py            # serves on http://localhost:5000
+```
+
+Or run it the way Vercel does:
+
+```bash
+vercel dev
+```
+
+### Configuration
+
+Enter an API key in the UI, or set provider keys in a `.env` file at the project root:
+
+| Variable | Provider |
+|----------|----------|
+| `GROQ_API_KEY` | Groq |
+| `CEREBRAS_API_KEY` | Cerebras |
+| `FREEMODEL_API_KEY` | FreeModel (shared fallback for both routes) |
+| `FREEMODEL_OPENAI_API_KEY` | FreeModel (OpenAI-compatible) |
+| `FREEMODEL_ANTHROPIC_API_KEY` | FreeModel (Anthropic-compatible) |
+
+Listing the same variable multiple times in `.env` registers backup keys that are rotated through on rate-limit or auth failures. A key entered in the UI always takes priority over environment keys.
+
+The **Custom Model ID** field overrides the selected preset — useful when your account exposes a model name that isn't in the dropdown.
+
+---
+
+## Testing
+
+The suite mocks all LLM calls, so it runs offline with no API key.
+
+```bash
+pip install pytest pytest-mock
+pytest -q                       # all tests
+pytest tests/test_utils.py -v   # pure helpers (parsing, validation, detection)
+pytest tests/test_api.py -v     # endpoints via the Flask test client
+```
+
+- `tests/test_utils.py` — section parsing, language validation, response validation, OS step parsing, caption helpers, output truncation, auto-detect, and the prompt builder.
+- `tests/test_api.py` — `/api/parse`, `/api/generate` (temperature, variation seed, system/user split, empty-response rejection, wrong-language retry, OS steps, auto-detect), `/api/refine` (existing-context, low temperature, aim preserved), `/api/detect`, `/api/download` (valid `.docx`, batch-size guard), and `/api/extract-aims`.
+
+---
+
+## Project structure
+
+```
+.
+├── app.py              # Flask backend — all API routes and document generation
+├── public/
+│   ├── index.html      # Single-page UI
+│   ├── script.js       # Frontend state, API calls, rendering
+│   └── style.css       # Dark theme, layout, animations
+├── tests/
+│   ├── test_utils.py   # Unit tests for backend helpers
+│   └── test_api.py     # API integration tests (mocked LLM)
+├── requirements.txt
+├── vercel.json         # Serverless routing + function limits
+└── README.md
+```
+
+---
+
+## API reference
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/parse` | POST | Split raw aim text into a list by separator |
+| `/api/generate` | POST | Generate one experiment (concept, code/procedure, output, caption) |
+| `/api/refine` | POST | Edit an existing experiment with a targeted change |
+| `/api/detect` | POST | Infer mode + language for each aim |
+| `/api/extract-aims` | POST | Extract aims from an uploaded syllabus PDF (multipart) |
+| `/api/download` | POST | Build and return a `.docx` from generated experiments |
+| `/api/classroom-zip` | POST | Build one `.docx` per student and return a ZIP |
+
+Generation and download accept gzip-compressed request bodies (`X-Content-Encoding: gzip`) so large batches stay within serverless payload limits.
+
+---
+
+## Notes & limits
+
+- Serverless functions cap at 60s (`vercel.json`), so very large batches are guarded server-side: `/api/download` rejects more than 200 output units, and Classroom mode is capped at 12 students per run.
+- Terminal output in the document is an image rendered with Pillow; it falls back to plain text if image generation fails.
+- Language validation uses lightweight heuristics, not a full parser — it reliably catches gross mismatches (e.g. C returned for a Python request) but isn't a linter.
+```
